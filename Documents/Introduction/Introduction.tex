@@ -1,0 +1,119 @@
+\documentclass[NewProceedings,letterpaper,NoPageNumbers]{ascelike-new}
+\WarningFilter{caption}{Unknown document class}
+%% Please choose the appropriate document class option:
+% "Journal" produces double-spaced manuscripts for ASCE journals.
+% "NewProceedings" produces single-spaced manuscripts for ASCE conference proceedings.
+% "Proceedings" produces older-style single-spaced manuscripts for ASCE conference proceedings. 
+%
+%% For more details and options, please see the notes in the ascelike-new.cls file.
+
+% Some useful packages...
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage[style=base,figurename=Fig.,labelfont=bf,labelsep=period]{caption}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{newtxtext,newtxmath}
+\usepackage[colorlinks=true,citecolor=red,linkcolor=black]{hyperref}
+%
+% Please add the first author's last name here for the footer:
+% \NameTag{AuthorOneLastName, \today}
+% Note that this is not displayed if the NoPageNumbers option is used
+% in the documentclass declaration.
+%
+\begin{document}
+
+% You will need to make the title all-caps
+\title{Prediction of Building Component Condition Assessment Scores}
+
+\author[1]{Eric Mixon}
+\author[2]{Ritu Das}
+\author[3]{Juliana Marks}
+\author[4]{Julian Hwang}
+
+\affil[1]{Email: ermixon2@illinois.edu}
+\affil[2]{Email: rrdas2@illinois.edu}
+\affil[3]{Email: jm128@illinois.edu}
+\affil[4]{Email: jzhwang3@illinois.edu}
+\maketitle
+
+\section{Introduction}
+
+Sustainment of very large real property portfolios requires many complex decisions. When a few decision makers must allocate constrained maintenance funding across millions of facilities, informed individual repair/replace decisions become infeasible for the whole portfolio. Real property managers in this situation rely on mathematical models to assist with funding distribution and work action decisions across the large scope.  These sustainment decision models generally rely on condition information about the inventory within the portfolio to drive their decision-making. This is known as a knowledge-based decision model.  In many cases, it is infeasible to install condition sensors on every component of every facility, so knowledge-based models will use expert observations in the form of condition assessments to inform inventory condition.  While sustainment models can attempt to predict condition deterioration over time, much like weather prediction models, they are only reliable for short-term horizons. So, periodic re-observations are required through assessment contracts with large A\&E firms to collect and update condition information.  
+
+Stemming from these requirements comes a need for real property managers to decide what inventory in their portfolio is due for re-observation.  Historically, the most common method is to simply reassess everything every 5 years (i.e. 20\% of the portfolio per year).  To reduce the amount and therefore cost of these assessments, a value of information (VOI) strategy could be utilized to make informed selections of which assets or components within the inventory are of the highest value to re-assess (i.e. the most likely to improve our maintenance investment decisions).  A critical requirement of this model is to be able to predict what scores an assessor would likely assign to a component based on historical data. 
+
+\section{Dataset}
+
+The dataset used for this project comes from assessment data collected by the USACE CERL developed SMS BUILDER platform. Observations are generated from component information using the SMS Weibull degradation model. Multiple observations can be generated for given components if they have multiple assessment records. The observation's predicted CI (Condition Index) is generated using the following:
+
+\begin{equation}
+\label{eq:sms-weibull-ci}
+\mathrm{CI}(t) = A \left( \frac{100}{\mathrm{CI}_{\mathrm{T}}} \right)^{ -\left(\frac{t}{\beta}\right)^{\alpha} }
+\end{equation}
+
+Where $\mathrm{t}$ is the normalized age of the component, $\mathrm{CI_T}$ is the design life of the component, A is the initial starting condition (usually 100), $\alpha$ is the scale or characteristic age of replacement, and $\beta$ is the shape or degradation parameter. The $\alpha$ and $\beta$ parameters are provided from a per specification reference catalog with the SMS system, however these values can be shifted after assessments to adjust the curve to fit to the assessed condition. In cases where components have multiple assessments, observations use the SMS $\alpha$ and $\beta$ shift calculations prior to calculating the predicted CI; this ensures continuity with the prediction at the time of the assessment. You can get a detailed intuition for the Weibull model using this helpful Desmos tool at \url{https://www.desmos.com/calculator/cenbpl3qtf}. The final resulting observations also capture other information about the component. See Table~\ref{table:assembly} for complete details.
+
+\begin{table}
+\caption{Assessment Observation Data}
+\label{table:assembly}
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{l l p{3.2in}}
+\hline\hline
+\multicolumn{1}{c}{Column} &
+\multicolumn{1}{c}{Type (Units)} &
+\multicolumn{1}{c}{Description} \\
+\hline
+Id & Int & Unique identifier for the observed component. Components can have multiple observations.\\
+Spec & Int & Unique identifier for the specification of the component. This represents the specific type of inventory being assessed (i.e. 2 HP Pump, 400 gallon AST, etc.) \\
+MEC & Int & Unique identifier for the Material Equipment Category. A less specific reference to the type of object being assessed (i.e. Pump, AST, Gas Boiler, etc.) \\
+System & Int & Unique identifier for a very generic classification of the component (i.e. HVAC Equipment, Exterior Shell, Plumbing, etc.) \\
+DesignLife & Int (Years) & Designed lifespan in years of the component. \\
+Qty & Float (UOM) & Quantity of the component. Units defined by UOM. \\
+UOM & String & Unit of Measure of the component Qty. \\
+NormilzedAge & Float & Equal to $\text{ComponentAge} / \text{DesignLife}$. \\
+Recency & Int (Years) & Number of years since the last assessment. Is empty if the component has not been assessed before. \\
+PredictedCI & Float & Predicted Condition Index by the knowledge-based deterioration model at the time of the observation. Calculated using SMS Weibull Model. \\
+ActualScore & Float & Expert assessor's assigned condition rating. \\
+CRV & Int (Dollars) & Component Replacement Value (i.e. Cost to replace the component) \\
+Fac & Int & Unique identifier for the type/purpose of the component's parent asset. \\
+AssetAge & Int (Years) & Age in years of the component's parent asset. \\
+AssetDesignLife & Int (Years) & Designed lifespan in years of the component's parent asset. \\
+PrevScore & Float & Previous assessment score. Is empty if the component has not assessed before. \\
+\hline
+\multicolumn{3}{l}{$\ast$ System->MEC->Spec form a data hierarchy similar to a WBS like classification structure.} \\
+\multicolumn{3}{l}{$\ast$ Data has been obfuscated, replacing readable definitions with numbers.} \\
+\hline\hline
+\end{tabular}
+\normalsize
+\end{table}
+
+\section{Proposed Objectives}
+
+With a dataset of ~2 million previous assessments, it should be possible to perform a detailed analysis.  The goal of this study will be to identify the best parameters about a component that would inform the best possible predictions about a likely assessment score distribution.  The study could also explore different types of models such as binning solutions, decision trees (XGBoost), ANNs, or other class-based solutions to find which of the options would inform the best predictions.
+
+\subsection{Objective 1}
+
+Objective Text
+
+\subsection{Objective 2}
+
+Objective Text
+
+\subsection{Objective 3}
+
+Objective Text
+
+\subsection{Objective 4}
+
+Objective Text
+
+\subsection{Objective 5}
+
+Objective Text
+
+\end{document}
