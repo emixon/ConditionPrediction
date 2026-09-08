@@ -47,14 +47,14 @@ Stemming from these requirements comes a need for real property managers to deci
 
 \section{Dataset}
 
-The dataset used for this project comes from assessment data collected by the USACE CERL developed SMS BUILDER platform. Observations are generated from component information using the SMS Weibull degradation model. Multiple observations can be generated for given components if they have multiple assessment records. The observation's predicted CI (Condition Index) is generated using the following:
+The dataset used for this project comes from assessment data in the Sustainment Management System (SMS) BUILDER platform developed by Construction Engineering Research Laboratory (CERL). Observations are generated from component information using the SMS Weibull degradation model. Multiple observations can be generated for given components if they have multiple assessment records. The observation's predicted CI (Condition Index) is generated using the following:
 
 \begin{equation}
 \label{eq:sms-weibull-ci}
 \mathrm{CI}(t) = A \left( \frac{100}{\mathrm{CI}_{\mathrm{T}}} \right)^{ -\left(\frac{t}{\beta}\right)^{\alpha} }
 \end{equation}
 
-Where $\mathrm{t}$ is the normalized age of the component, $\mathrm{CI_T}$ is the design life of the component, A is the initial starting condition (usually 100), $\alpha$ is the scale or characteristic age of replacement, and $\beta$ is the shape or degradation parameter. The $\alpha$ and $\beta$ parameters are provided from a per specification reference catalog with the SMS system, however these values can be shifted after assessments to adjust the curve to fit to the assessed condition. In cases where components have multiple assessments, observations use the SMS $\alpha$ and $\beta$ shift calculations prior to calculating the predicted CI; this ensures continuity with the prediction at the time of the assessment. You can get a detailed intuition for the Weibull model using this helpful Desmos tool at \url{https://www.desmos.com/calculator/cenbpl3qtf}. The final resulting observations also capture other information about the component. See Table~\ref{table:assembly} for complete details.
+Where $\mathrm{t}$ is the normalized age of the component, $\mathrm{CI_T}$ is the design life of the component, A is the initial starting condition (usually 100), $\alpha$ is the scale or characteristic age of replacement, and $\beta$ is the shape or degradation parameter. The $\alpha$ and $\beta$ parameters are provided from a per specification reference catalog within the SMS, however these values can be shifted after assessments to adjust the curve to fit to the assessed condition. In cases where components have multiple assessments, observations use the SMS $\alpha$ and $\beta$ shift calculations prior to calculating the predicted CI; this ensures continuity with the prediction at the time of the assessment. You can get a detailed intuition for the Weibull model using this helpful Desmos tool at \url{https://www.desmos.com/calculator/cenbpl3qtf}. The final resulting observations also capture other information about the component. See Table~\ref{table:assembly} for complete details.
 
 \begin{table}
 \caption{Assessment Observation Data}
