@@ -30,10 +30,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: intro-pdf
-          path: Introduction.pdf # Change this if your root file has a different name
+          path: ./Documents/Introduction/Introduction.pdf # Change this if your root file has a different name
 
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v4
         with:
           name: final-pdf
-          path: CEE_492_Final_Report.pdf # Change this if your root file has a different name
+          path: ./Documents/FinalReport/CEE_492_Final_Report.pdf # Change this if your root file has a different name
