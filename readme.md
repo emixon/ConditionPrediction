@@ -1,9 +1,9 @@
-# Project Setup Guide
-
----
+# Predicting Assessment Scores of Building Components
 
 ## Table of Contents
 
+- [Project Overview](#project-overview)
+- [Setup Guide](#setup-guide)
 - [Required Tools](#required-tools)
 - [Clone the Repository](#clone-the-repository)
 - [macOS Setup](#macos-setup)
@@ -11,7 +11,17 @@
 - [Configure Git](#configure-git)
 - [Open the Project in VS Code](#open-the-project-in-vs-code)
 
+
+## Project Overview
+
+A class project for UIUC Fall semester CEE 492 "Data Science for CEE". This project analyzes assessment data from real world condition assessments of building components to try and develop a model for predicting future condition scores based on known component information.
+
+TODO: Add project structure and basic model workflow as we develop.
+
 ---
+
+
+# Setup Guide
 
 ## Required Tools
 
@@ -37,11 +47,11 @@ Install the following extensions from the VS Code Extensions panel:
 
 ---
 
-# macOS Setup
+# MacOS Setup
 
 ## 1. Install Homebrew
 
-[Homebrew](https://brew.sh/) is a package manager for macOS. We will use it to install Git, Julia, and Typst.
+[Homebrew](https://brew.sh/) is a package manager for macOS. I recommend it for development dependencies on Mac
 
 Open **Terminal** and follow the installation command on the official Homebrew website:
 
@@ -99,25 +109,6 @@ After downloading:
 2. Drag **Visual Studio Code.app** into the **Applications** folder.
 3. Open VS Code from Applications.
 
-### Enable the `code` Command
-
-To open the repository from Terminal using `code .`:
-
-1. Open VS Code.
-2. Press `Cmd + Shift + P`.
-3. Search for and select:
-
-   ```text
-   Shell Command: Install 'code' command in PATH
-   ```
-
-4. Close and reopen Terminal.
-5. Verify the command works:
-
-```bash
-code --version
-```
-
 ---
 
 ## 5. Install LaTeX: MacTeX
@@ -148,14 +139,6 @@ Verify the installation:
 ```bash
 typst --version
 ```
-
-Typst can compile a `.typ` file to a PDF from the terminal:
-
-```bash
-typst compile assignment.typ
-```
-
-This creates `assignment.pdf` in the current folder.
 
 ---
 
@@ -214,29 +197,13 @@ After installation, open a new PowerShell window and verify:
 julia --version
 ```
 
-If the `julia` command is not recognized, restart PowerShell first. If it still does not work, see the [Troubleshooting](#troubleshooting) section.
-
 ---
 
 ## 3. Install Visual Studio Code
 
 Download and install VS Code:
 
-- [Download VS Code for Windows](https://code.visualstudio.com/Download)
-
-During installation, the following options are recommended when available:
-
-- Add VS Code to `PATH`
-- Add **Open with Code** to the Windows Explorer context menu
-- Register VS Code as an editor for supported file types
-
-After installation, open PowerShell and verify:
-
-```powershell
-code --version
-```
-
-If the command is not recognized, restart PowerShell. You can still open VS Code manually if necessary.
+- [Download and Install VS Code for Windows](https://code.visualstudio.com/Download)
 
 ---
 
@@ -244,30 +211,7 @@ If the command is not recognized, restart PowerShell. You can still open VS Code
 
 For Windows, install **MiKTeX**:
 
-- [Download MiKTeX](https://miktex.org/download)
-
-MiKTeX is the recommended LaTeX distribution for this project on Windows and serves the same general role that MacTeX serves on macOS.
-
-During installation:
-
-1. Use the standard installer.
-2. If MiKTeX asks whether to install missing packages automatically, choose:
-
-   ```text
-   Yes
-   ```
-
-   or:
-
-   ```text
-   Ask me first
-   ```
-
-After installation, close and reopen PowerShell. Verify that LaTeX is available:
-
-```powershell
-pdflatex --version
-```
+- [Download And Install MiKTeX](https://miktex.org/download)
 
 ---
 
@@ -290,14 +234,6 @@ After installation, close and reopen PowerShell. Verify the installation:
 ```powershell
 typst --version
 ```
-
-Compile a Typst file from the terminal with:
-
-```powershell
-typst compile assignment.typ
-```
-
-This creates `assignment.pdf` in the same directory.
 
 ---
 
@@ -323,42 +259,3 @@ Every contributor should configure their Git name and email address. Use the nam
 git config --global user.name "Your Name"
 git config --global user.email "your-email@example.com"
 ```
-
-Verify your settings:
-
-```bash
-git config --global --list
-```
-
-Example:
-
-```bash
-git config --global user.name "Jane Smith"
-git config --global user.email "jane.smith@example.com"
-```
-
----
-
-# Open the Project in VS Code
-
-From the repository folder, run:
-
-```bash
-code .
-```
-
-This opens the current folder as a VS Code project.
-
-If `code .` does not work:
-
-- **macOS:** Follow the [Enable the `code` Command](#enable-the-code-command) instructions.
-- **Windows:** Restart PowerShell after installing VS Code, or open VS Code manually and select **File → Open Folder**.
-
-Once the folder is open:
-
-1. Confirm that you can see the project files in the Explorer panel.
-2. Open a `.jl` file and confirm the Julia extension activates.
-3. Open a `.tex` file and confirm LaTeX Workshop activates.
-4. Open a `.typ` file and confirm Tinymist activates.
-
----
