@@ -10,32 +10,48 @@ jobs:
   build_latex:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Check out the repository content
       - name: Set up Git repository
-        uses: actions/checkout@v4
-
-      # Step 2: Compile the LaTeX document
-      - name: Compile LaTeX document
-        uses: xu-cheng/latex-action@v3
-        with:
-          root_file: ./Introduction.tex # Change this to match your primary .tex file name
-          working_directory: ./Documents/Introduction/ 
+        uses: actions/checkout@v7
 
       - name: Compile LaTeX document
-        uses: xu-cheng/latex-action@v3
+        uses: xu-cheng/latex-action@v4
         with:
-          root_file: ./CEE_492_Final_Report.tex # Change this to match your primary .tex file name
-          working_directory: ./Documents/FinalReport/
+          root_file: ./introduction.tex # Change this to match your primary .tex file name
+          working_directory: ./reports/introduction/ 
 
-      # Step 3: Upload the generated PDF as an artifact
+      - name: Compile LaTeX document
+        uses: xu-cheng/latex-action@v4
+        with:
+          root_file: ./cee492_report.tex # Change this to match your primary .tex file name
+          working_directory: ./reports/final/
+
       - name: Upload PDF artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: intro-pdf
-          path: ./Documents/Introduction/Introduction.pdf # Change this if your root file has a different name
+          archive: false
+          path: ./reports/introduction/introduction.pdf # Change this if your root file has a different name
 
       - name: Upload PDF artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: final-pdf
-          path: ./Documents/FinalReport/CEE_492_Final_Report.pdf # Change this if your root file has a different name
+          archive: false
+          path: ./reports/final/cee492_report.pdf # Change this if your root file has a different name
+    render-report:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v7
+        # charged-ieee typesets in TeX Gyre Termes/Cursor
+        - run: sudo apt-get update && sudo apt-get install -y fonts-texgyre
+        - uses: typst-community/setup-typst@v5
+          with:
+            typst-version: v0.15.1
+        - run: typst compile ./reports/typst/cee492_report.typ ./reports/typst/cee492_report.pdf
+        - uses: actions/upload-artifact@v7
+          with:
+              # archive: false uploads the PDF directly, so downloading it gives
+              # you the PDF rather than a zip file you have to unpack. The
+              # artifact is then named after the file: cee492_report.pdf
+              archive: false
+              path: cee492_report.pdf

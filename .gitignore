@@ -7,8 +7,18 @@
 *.lof
 *.log
 *.lot
+*.toc
 *.out
 *.synctex.gz
 *.ttt
 *.pdf
 *.docx
+
+# Editor / OS cruft
+.DS_Store
+Icon
+.vscode/
+Thumbs.db
+
+# Julia
+*.ji
