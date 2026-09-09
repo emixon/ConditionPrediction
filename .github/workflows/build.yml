@@ -16,13 +16,13 @@ jobs:
       - name: Compile LaTeX document
         uses: xu-cheng/latex-action@v4
         with:
-          root_file: ./introduction.tex # Change this to match your primary .tex file name
+          root_file: ./introduction.tex 
           working_directory: ./reports/introduction/ 
 
       - name: Compile LaTeX document
         uses: xu-cheng/latex-action@v4
         with:
-          root_file: ./cee492_report.tex # Change this to match your primary .tex file name
+          root_file: ./cee492_final_report.tex
           working_directory: ./reports/final/
 
       - name: Upload PDF artifact
@@ -30,28 +30,27 @@ jobs:
         with:
           name: intro-pdf
           archive: false
-          path: ./reports/introduction/introduction.pdf # Change this if your root file has a different name
+          path: ./reports/introduction/introduction.pdf 
 
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v7
         with:
           name: final-pdf
           archive: false
-          path: ./reports/final/cee492_report.pdf # Change this if your root file has a different name
+          path: ./reports/final/cee492_final_report.pdf
   build_typst:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # charged-ieee typesets in TeX Gyre Termes/Cursor
       - run: sudo apt-get update && sudo apt-get install -y fonts-texgyre
       - uses: typst-community/setup-typst@v5
         with:
           typst-version: v0.15.1
-      - run: typst compile ./reports/typst/cee492_report.typ ./reports/typst/cee492_report.pdf
+      - run: typst compile ./reports/typst/cee492_report.typ ./reports/typst/cee492_typst_report.pdf
       - uses: actions/upload-artifact@v7
         with:
             # archive: false uploads the PDF directly, so downloading it gives
             # you the PDF rather than a zip file you have to unpack. The
             # artifact is then named after the file: cee492_report.pdf
             archive: false
-            path: cee492_report.pdf
+            path: ./reports/typst/cee492_typst_report.pdf
