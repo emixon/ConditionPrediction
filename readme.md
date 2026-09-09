@@ -4,12 +4,9 @@
 
 - [Project Overview](#project-overview)
 - [Setup Guide](#setup-guide)
-- [Required Tools](#required-tools)
-- [Clone the Repository](#clone-the-repository)
-- [macOS Setup](#macos-setup)
+- [MacOS Setup](#macos-setup)
 - [Windows Setup](#windows-setup)
 - [Configure Git](#configure-git)
-- [Open the Project in VS Code](#open-the-project-in-vs-code)
 
 
 ## Project Overview
