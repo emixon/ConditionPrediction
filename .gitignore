@@ -22,3 +22,6 @@ Thumbs.db
 
 # Julia
 *.ji
+
+# Observations is ~200 mb - A bit large for keeping in the repo
+data/observations.csv
