@@ -15,6 +15,23 @@ A class project for UIUC Fall semester CEE 492 "Data Science for CEE". This proj
 
 TODO: Add project structure and basic model workflow as we develop.
 
+## Quick Tips
+
+### Initializing Julia
+From the Condition Prediction directory, run:
+
+```bash
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+```
+
+
+### Running a Notebook
+From the ConditionPrediction directory, run:
+
+```bash
+julia --project=. -e 'import Pluto; Pluto.run()'
+```
+
 ---
 
 
