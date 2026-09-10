@@ -34,6 +34,23 @@ julia --project=. -e 'import Pluto; Pluto.run()'
 
 ---
 
+### LaTeX Workshop on Windows
+You may need to manually configure the pdflatex recipe for your builds on Windows in VSCode
+
+Add the following to your Settings(JSON) inside the {}.
+
+```bash
+"latex-workshop.latex.recipes": [
+   {
+      "name": "pdflatex ➞ pdflatex",
+      "tools": [
+            "pdflatex",
+            "pdflatex"
+      ]
+   }
+],
+```
+
 
 # Setup Guide
 
