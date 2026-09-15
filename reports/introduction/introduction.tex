@@ -1,4 +1,4 @@
-\documentclass[NewProceedings,letterpaper,NoPageNumbers]{ascelike-new}
+\documentclass[Journal,letterpaper,NoPageNumbers,NoLineNumbers]{ascelike-new}
 \WarningFilter{caption}{Unknown document class}
 %% Please choose the appropriate document class option:
 % "Journal" produces double-spaced manuscripts for ASCE journals.
@@ -92,28 +92,72 @@ PrevScore & Float & Previous assessment score. Is empty if the component has not
 \normalsize
 \end{table}
 
+Assessment scores generally are collected as "Direct Condition Ratings", amounting to a selection from 9 possible score options. An example criterion for these scores can be found below in Table \ref{table:AssessmentScores} (Not all organizations have exactly the same criterion, but the score choices are always the same). Most organizations have additional guidance through large (sometimes 1000's of pages) assessment guides. These guides direct the types of components to inventory and assess, when and how to input comments about the assessment, additional criterion for scoring for specific component types, and other data quality governance. 
+
+\begin{table}
+\caption{Example Assessment Scoring Criteria based on USACE Guidance.}
+\label{table:AssessmentScores}
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{l r p{3.5in}}
+\hline\hline
+\multicolumn{1}{c}{Rating} &
+\multicolumn{1}{c}{CI Value} &
+\multicolumn{1}{c}{Rating Definition} \\
+\hline
+Green (+) &
+100 &
+Entire component is free of observable distresses. Like-new condition. \\
+
+Green &
+95 &
+No serviceability or reliability reduction. Slight degradation but noncritical. No work other than routine maintenance is required. \\
+
+Green ($-$) &
+88 &
+Slight or no serviceability or reliability reduction. Some noticeable degradation is present but remains noncritical. No work other than routine maintenance is required. \\
+
+Amber (+) &
+79 &
+Serviceability or reliability is degraded but remains adequate. Moderate deterioration is present but remains noncritical. Minor repairs are needed. \\
+
+Amber &
+68 &
+Serviceability or reliability is noticeably impaired. Moderate deterioration or damage requires corrective repairs. \\
+
+Amber ($-$) &
+60 &
+Significant serviceability or reliability loss. Significant degradation or damage requires major rehabilitation or overhaul. \\
+
+Red (+) &
+50 &
+Significant serviceability or reliability loss. Repairs are not feasible, and replacement is needed. \\
+
+Red &
+25 &
+Severe serviceability or reliability reduction may result in loss of use or safety. Immediate replacement is warranted. \\
+
+Red ($-$) &
+10 &
+Complete degradation and loss of serviceability. May result in damage to surrounding components. Replace immediately. \\
+\hline\hline
+\end{tabular}
+\normalsize
+\end{table}
+
 \section{Proposed Objectives}
 
 With a dataset of 2,772,711 previous assessments, it should be possible to perform a detailed analysis.  The goal of this study will be to identify the best parameters about a component that would inform the best possible predictions about a likely assessment score distribution.  The study could also explore different types of models such as binning solutions, decision trees (XGBoost), ANNs, or other class-based solutions to find which of the options would inform the best predictions.
 
-\subsection{Objective 1}
-
-Objective Text
-
-\subsection{Objective 2}
-
-Objective Text
-
-\subsection{Objective 3}
-
-Objective Text
-
-\subsection{Objective 4}
-
-Objective Text
-
-\subsection{Objective 5}
-
-Objective Text
+The proposed workflow for the project is:
+\begin{enumerate}
+\item Perform initial exploratory analysis to identify data wrangling needs and potential data bias.
+\item Perform Principal Component Analysis (PCA) to identify the best predictive parameters.
+\item 
+\item 
+\item 
+\item 
+\end{enumerate}
 
 \end{document}
