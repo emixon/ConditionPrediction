@@ -154,10 +154,10 @@ The proposed workflow for the project is:
 \begin{enumerate}
 \item Perform initial exploratory analysis to identify data wrangling needs and potential data bias.
 \item Perform Principal Component Analysis (PCA) to identify the best predictive parameters.
-\item 
-\item 
-\item 
-\item 
+\item Build a prediction model returning multi-class distribution using a Artificial Neural Network (ANN) trained on identified principal components.
+\item Build a prediction model returnig multi-class distribution using XGBoost (or other decision tree library) trained on identified principal components.
+\item Build additional prediction models based on in-class statistical learning solutions.
+\item Perform comparative study between prediction models to identify which has the best predictive performance.
 \end{enumerate}
 
 \end{document}
