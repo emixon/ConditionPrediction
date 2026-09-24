@@ -73,10 +73,12 @@ System & Int & Unique identifier for a very generic classification of the compon
 DesignLife & Int (Years) & Designed lifespan in years of the component. \\
 Qty & Float (UOM) & Quantity of the component. Units defined by UOM. \\
 UOM & String & Unit of Measure of the component Qty. \\
-NormilzedAge & Float & Equal to $\text{ComponentAge} / \text{DesignLife}$. \\
+NormalizedAge & Float & Equal to $\text{ComponentAge} / \text{DesignLife}$. \\
+EffectiveAge & Float & The curve adjusted age of the component at the time of assessment \\
+RSL & Float & The adjusted remaining service life of the component equal to $\text{DesignLife} - \text{EffectiveAge}$ \\
 Recency & Int (Years) & Number of years since the last assessment. Is empty if the component has not been assessed before. \\
 PredictedCI & Float & Predicted Condition Index by the knowledge-based deterioration model at the time of the observation. Calculated using SMS Weibull Model. \\
-ActualScore & Float & Expert assessor's assigned condition rating. \\
+Score & Float & Expert assessor's assigned condition rating. \\
 CRV & Int (Dollars) & Component Replacement Value (i.e. Cost to replace the component) \\
 Fac & Int & Unique identifier for the type/purpose of the component's parent asset. \\
 AssetAge & Int (Years) & Age in years of the component's parent asset. \\

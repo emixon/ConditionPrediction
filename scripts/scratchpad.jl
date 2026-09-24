@@ -9,7 +9,7 @@ age_hist = histogram(df.NormalizedAge, bins=500, title="Normalized Age")
 
 ci_hist = histogram(df.PredictedCI, bins=500, title="Predicted CI")
 
-score_hist = histogram(df.ActualScore, bins=500, title="Assessed Score")
+score_hist = histogram(df.Score, bins=500, title="Assessed Score")
 
 crv_hist = histogram(df.CRV, bins=500, title="Replacement Value")
 

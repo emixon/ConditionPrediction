@@ -27,7 +27,7 @@ age_hist = histogram(df.NormalizedAge, bins=500, title="Normalized Age")
 
 ci_hist = histogram(df.PredictedCI, bins=500, title="Predicted CI")
 
-score_hist = histogram(df.ActualScore, bins=500, title="Assessed Score")
+score_hist = histogram(df.Score, bins=500, title="Assessed Score")
 
 crv_hist = histogram(df.Recency, bins=500, title="Replacement Value")
 
@@ -36,34 +36,46 @@ end
 
 # ╔═╡ 43ec02bf-1aa0-47b0-ad05-981fceefc222
 begin
-	sdf = combine(groupby(df, :Spec), nrow => :Count)
+	sdf = combine(groupby(df, :MEC), nrow => :Count)
 	ssdf = sort(sdf, :Count, rev=true)
 end
 
 # ╔═╡ 763c68c0-223c-4cf5-81fc-45d78a379935
 begin
-	function getSpec(df, spec)
-        df[df.Spec .== spec, :]
+	function getMEC(df, MEC)
+        df[df.MEC .== MEC, :]
     end
 
-    function getHistQuad(d, spec)
+    function getHistQuad(d, mec)
         plot(
-            histogram(d.NormalizedAge; bins=100, title="$spec Normalized Age"),
-            histogram(d.PredictedCI;  bins=100, title="$spec Predicted CI"),
-            histogram(d.ActualScore;  bins=100, title="$spec Assessed Score"),
-            histogram(d.Recency;      bins=100, title="$spec Recency"),
+            histogram(d.NormalizedAge; bins=100, title="$mec Normalized Age"),
+            histogram(d.PredictedCI;  bins=100, title="$mec Predicted CI"),
+            histogram(d.Score;  bins=100, title="$mec Assessed Score"),
+            histogram(d.Recency;      bins=100, title="$mec Recency"),
             layout=(2, 2),
         )
     end
 
-    top_specs = ssdf.Spec[1:min(12, nrow(ssdf))]
+    top_MECs = ssdf.MEC[1:min(12, nrow(ssdf))]
     
     quads = [
-        getHistQuad(getSpec(df, spec), spec)
-        for spec in top_specs
+        getHistQuad(getMEC(df, mec), mec)
+        for mec in top_MECs
     ]
     
     plot(quads...; layout=(4, 3), size=(2400, 1800))
+end
+
+# ╔═╡ 2c52a013-0c51-4e48-aaf4-8621f52c7c52
+begin
+	# Boilers
+	plot(getHistQuad(getMEC(df, 171), 171))
+end
+
+# ╔═╡ 305f5ea8-86c0-44ca-9eae-8fe28f84dc56
+begin
+	# Exterior Closures
+	plot(getHistQuad(getMEC(df, 28), 28))
 end
 
 # ╔═╡ Cell order:
@@ -71,3 +83,5 @@ end
 # ╠═af5b14a9-9e5b-42d4-bc68-abf314fc3928
 # ╠═43ec02bf-1aa0-47b0-ad05-981fceefc222
 # ╠═763c68c0-223c-4cf5-81fc-45d78a379935
+# ╠═2c52a013-0c51-4e48-aaf4-8621f52c7c52
+# ╠═305f5ea8-86c0-44ca-9eae-8fe28f84dc56
