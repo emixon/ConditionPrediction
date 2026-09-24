@@ -45,7 +45,7 @@ Stemming from these requirements comes a need for real property managers to deci
 
 \section{Dataset}
 
-The dataset used for this project comes from assessment data in the Sustainment Management System (SMS) BUILDER platform developed by Construction Engineering Research Laboratory (CERL). Observations are generated from component information using the SMS Weibull degradation model. Multiple observations can be generated for given components if they have multiple assessment records. The observation's predicted CI (Condition Index) is generated using the following:
+The dataset used for this project comes from assessment data in the Sustainment Management System (SMS) BUILDER platform developed by Construction Engineering Research Laboratory (CERL). The full dataset includes approximately 2.7 million observations. Observations include both a manually collected direct condition rating and a predicted condition index generated from component information using the SMS Weibull degradation model at the time of an assessment. Multiple observations can be generated for given components if they have multiple assessment records. The observation's predicted CI (Condition Index) is generated using the following:
 
 \begin{equation}
 \label{eq:sms-weibull-ci}
@@ -146,7 +146,7 @@ Complete degradation and loss of serviceability. May result in damage to surroun
 
 \section{Proposed Objectives}
 
-With a dataset of 56,908 previous assessments from a single specification, it should be possible to perform a detailed analysis.  The goal of this study will be to identify the best parameters about a component that would inform the best possible predictions about a likely assessment score distribution.  The study could also explore different types of models such as binning solutions, decision trees (XGBoost), ANNs, or other class-based solutions to find which of the options would inform the best predictions.
+Although the dataset consists of 2.7 million observations, a subset corresponding to a single material equipment category (MEC) will be used for this project. The MEC for boilers consists of 12,832 assessments, so it should be possible to perform a detailed analysis for the specifications within this MEC. The goal of this study will be to identify the best parameters about a component that would inform the best possible predictions about a likely assessment score distribution.  The study could also explore different types of models such as binning solutions, decision trees (XGBoost), ANNs, or other class-based solutions to find which of the options would inform the best predictions.
 
 The proposed workflow for the project is:
 \begin{enumerate}
