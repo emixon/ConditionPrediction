@@ -75,8 +75,17 @@ md"""
 ## Data Wrangling
 """
 
-# ╔═╡ 64dbadfb-21b1-4ecd-b157-efd6f3a96983
+# ╔═╡ 78c6cc72-5658-495d-9444-cfa4b4bc582a
+md"""
+### The \$1,000,000 boiler
+"""
 
+# ╔═╡ 64dbadfb-21b1-4ecd-b157-efd6f3a96983
+begin
+	crv = boilers[!, :CRV]
+	scrv = sort(crv, rev=true)
+	plot(scrv, xlabel="Index", ylabel="Cost", st=:scatter)
+end
 
 # ╔═╡ b62c7f0d-f9e8-41b6-9eb6-e77f55345806
 md"""
@@ -125,6 +134,7 @@ md"""
 # ╟─9371dd2a-8673-4104-b04b-4d91a597427a
 # ╟─43ee48fd-370d-412e-968f-3df0c2b7c422
 # ╟─3426ad4c-a340-46c3-994a-0e30dccef086
+# ╟─78c6cc72-5658-495d-9444-cfa4b4bc582a
 # ╠═64dbadfb-21b1-4ecd-b157-efd6f3a96983
 # ╟─b62c7f0d-f9e8-41b6-9eb6-e77f55345806
 # ╠═5d26ccac-1d20-44f7-8696-440e91eeabf1
