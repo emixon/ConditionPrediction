@@ -27,6 +27,9 @@ end
 # ╔═╡ 84f27c4d-3dd5-4cbe-87a1-5802bfdbf96c
 describe(df)
 
+# ╔═╡ 5fa531f1-d2b4-4e0f-9fd8-96497a8f5a34
+histogram(df.Score;  bins=100, title="Assessed Score")
+
 # ╔═╡ 43ec02bf-1aa0-47b0-ad05-981fceefc222
 begin
 	sdf = combine(groupby(df, :MEC), nrow => :Count)
@@ -94,6 +97,7 @@ end
 # ╠═e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
 # ╠═af5b14a9-9e5b-42d4-bc68-abf314fc3928
 # ╠═84f27c4d-3dd5-4cbe-87a1-5802bfdbf96c
+# ╠═5fa531f1-d2b4-4e0f-9fd8-96497a8f5a34
 # ╠═43ec02bf-1aa0-47b0-ad05-981fceefc222
 # ╠═763c68c0-223c-4cf5-81fc-45d78a379935
 # ╠═2c52a013-0c51-4e48-aaf4-8621f52c7c52
