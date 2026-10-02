@@ -95,7 +95,7 @@ Once the new :PrevAssessed column is created, we will replace "missing" values w
 
 # ╔═╡ b078a14b-049e-4398-9c79-85ef7fde2843
 begin
-	boilers.PrevAssessed = Int.(ismissing.(boilers.PrevScore))
+	boilers.PrevAssessed = Int.(.!ismissing.(boilers.PrevScore))
 	
 	mean_PrevScore = mean(skipmissing(boilers.PrevScore))
 	mean_Recency = mean(skipmissing(boilers.Recency))
@@ -110,19 +110,19 @@ end
 # ╔═╡ 78c6cc72-5658-495d-9444-cfa4b4bc582a
 md"""
 ### The \$1,000,000 boiler
+The CRV column values notably cover a range several orders of magnitude more than the rest of our values. When doing a PCA analysis, this will cause CRV to dominate the first component due simply to its numerical scale. The typical recommended action to take in this case is to utilize a log scale for such a datatype when doing PCA. So we will add a LogCRV column to our boilers dataframe for this reason. As shown by the plot below, this also makes our CRV data more symmetric and lowers the influence of the drastically more expensive outliers.
 """
 
 # ╔═╡ 64dbadfb-21b1-4ecd-b157-efd6f3a96983
 begin
 	crv = boilers[!, :CRV]
 	scrv = sort(crv, rev=true)
-	plot(scrv, xlabel="Index", ylabel="Cost", st=:scatter)
-end
-
-# ╔═╡ 82c5ac02-1bfe-459a-ad49-b5eb84aca954
-begin
-	# That special guy
-	subset(boilers, :CRV => ByRow(==(902540)))
+	boilers.LogCRV = log1p.(boilers.CRV)
+	log_crv = boilers[!, :LogCRV]
+	log_scrv = sort(log_crv, rev=true)
+	crv_plot = plot(scrv, xlabel="Index", ylabel="Cost", title="CRV", st=:scatter)
+	log_crv_plot = plot(log_scrv, xlabel="Index", ylabel="Cost", title="Log CRV", st=:scatter)
+	plot(crv_plot, log_crv_plot, layout=(1,2), size=(1200, 800))
 end
 
 # ╔═╡ b62c7f0d-f9e8-41b6-9eb6-e77f55345806
@@ -133,18 +133,197 @@ In our goal to predict assessment scores for a given component, it is useful to 
 
 # ╔═╡ b23788a2-2890-4417-bb00-9ebd4565b449
 md"""
-### Removing Id Column
-The data wrangling process took care of most of the data reshaping, for the PCA, we will still need to remove the :Id column and the transform the matrix.
+### Removing Identifier Columns and Standardization
+The data wrangling process took care of most of the data cleanup and reshaping for the PCA, but we still have identifier columns that are not really quantitative measurements. The :Id, :Spec, and :Fac should be omitted from the PCA, though :Spec and :Fac can still be used later when developing predictive models. Since our goal ultimately is to predict the :Score of the component, we will also want to omit :Score from the initial PCA to avoid "data leakage".
+
+Additionally, while we addressed CRV's order of magnitude, there are still a wide numerical range of units.  To ensure values with larger numerical scales (like :AssetAge) don't dominate the analysis, in addition to centering the data by subtracting the mean of each attribute, we also standardize by dividing each centered attribute by its standard deviation.
 """
 
-# ╔═╡ 0b5304f0-3304-4f32-9070-3348c05797d3
+# ╔═╡ 03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
 begin
-	modes = 15
-	pca_boilers = select(boilers, Not([:Id])) # Remove :Id column
-	X = Matrix(pca_boilers)' # convert dataframe into Matrix and transform
-	X̄ = mean(X, dims=2) # Get Mean
-	B = X .- X̄ # Get Normalized Matrix
-	F = svd(B) # SVD
+    # The Columns we want to use for the PCA
+    pca_vars = [
+        :NormalizedAge,
+        :EffectiveAge,
+        :RSL,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :PredictedCI,
+        :Qty,
+        :AssetAge,
+        :AssetDesignLife,
+        :LogCRV,
+    ]
+
+    X = Matrix(select(boilers, pca_vars))' # Select columns, convert to matrix, and transform
+    
+    X̄ = mean(X, dims=2) # Get the Mean
+    σ = std(X, dims=2) # Get the Standard Deviation
+
+    Z = (X .- X̄) ./ σ # Normalize AND Standardize
+
+    F = svd(Z) # Get the SVD
+
+    explained_variance = F.S .^ 2 ./ (size(Z, 2) - 1)
+    explained_ratio = explained_variance ./ sum(explained_variance)
+    cumulative_ratio = cumsum(explained_ratio)
+
+    DataFrame(
+        PC = 1:length(F.S),
+        ExplainedVariance = explained_variance,
+        ExplainedRatio = explained_ratio,
+        CumulativeRatio = cumulative_ratio,
+    )
+end
+
+# ╔═╡ a4346d81-ccfe-4376-9cc6-27973e80c095
+begin
+    modes = 11
+    plot(
+        1:modes,
+        explained_ratio[1:modes] .* 100;
+        marker = :circle,
+        xlabel = "Principal Component",
+        ylabel = "Explained Variance (%)",
+        title = "Boiler PCA Plot",
+        legend = false,
+    )
+end
+
+# ╔═╡ e417d3b5-d72d-43d5-8662-ad3eefce447d
+begin
+    loadings = DataFrame(
+        Variable = string.(pca_vars),
+        PC1 = F.U[:, 1],
+        PC2 = F.U[:, 2],
+        PC3 = F.U[:, 3],
+        PC4 = F.U[:, 4],
+        PC5 = F.U[:, 5],
+        PC6 = F.U[:, 6],
+        PC7 = F.U[:, 7],
+        PC8 = F.U[:, 8],
+        PC9 = F.U[:, 9],
+        PC10 = F.U[:, 10],
+        PC11 = F.U[:, 11],
+    )
+
+    sort!(loadings, :PC1, by=abs, rev=true)
+
+    loadings
+end
+
+# ╔═╡ 4daad98c-f8a2-4430-946e-8efd6189a008
+md"""
+### Repeat the analysis less redundant age measures
+The initial analysis showed a high ratio of explained variance for PC1 (~34%), however, the variables dominating the PC were all lifecycle representations that are mathematically similar and therefore potentially redundant.
+
+NormalizedAge: -.496
+
+RSL: .491
+
+PredictedCI: .487
+
+EffectiveAge -.479
+
+Below we repeat the analysis while keeping just one of the lifecycle parameters (in this case RSL). RSL is arbitrarily chosen in this case, mostly due to it being arguably the easiest for most people to understand from an interpretability standpoint. We could, however, just as easily repeat with any of the others.
+
+We start by defining some helper functions to help with generalization of the process in case we want to repeat it from different perspectives. (This also just helps avoid Julia "redifined variable" issues)
+
+The final result shows a much smoother decline in explained variance for our remaining PCs, with PC1-7 explaining ~93% of the variance.
+
+Initial take-aways from this suggest that predictive models would potentially benefit from choosing only one of :NormalizedAge, :RSL, :PredictedCI, or :EffectiveAge to avoid duplicate encoded information. While not conclusively an expected improvement, it does suggest it to be a reasonable test case.
+"""
+
+# ╔═╡ ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# In case we want to do this with more variations, we'll generalize with a function.
+function CalcSVDAndExplainedVariance(pca_variables, df)
+	X = Matrix(select(df, pca_variables))' # Select columns, convert to matrix, and transform
+    
+    X̄ = mean(X, dims=2) # Get the Mean
+    σ = std(X, dims=2) # Get the Standard Deviation
+
+    Z = (X .- X̄) ./ σ # Normalize AND Standardize
+
+    F = svd(Z) # Get the SVD
+
+    explained_variance = F.S .^ 2 ./ (size(Z, 2) - 1)
+    explained_ratio = explained_variance ./ sum(explained_variance)
+    cumulative_ratio = cumsum(explained_ratio)
+
+    results = DataFrame(
+        PC = 1:length(F.S),
+        ExplainedVariance = explained_variance,
+        ExplainedRatio = explained_ratio,
+        CumulativeRatio = cumulative_ratio,
+    )
+    return F, results, explained_variance, explained_ratio
+end
+
+# ╔═╡ 0bf742cc-4661-4a33-bee0-4905860d2562
+function GetPCAPlot(modes, explained_ratio)
+
+	plot(
+        1:modes,
+        explained_ratio[1:modes] .* 100;
+        marker = :circle,
+        xlabel = "Principal Component",
+        ylabel = "Explained Variance (%)",
+        title = "Boiler PCA Plot",
+        legend = false,
+    )
+end
+
+# ╔═╡ e39f1b09-9bce-40d5-b5d9-03946bffe6fe
+function GetLoadings(F, pca_vars; sort_by = :PC1)
+    loadings = DataFrame(
+        Variable = string.(pca_vars),
+    )
+
+    for k in axes(F.U, 2)
+        loadings[!, Symbol("PC$k")] = F.U[:, k]
+    end
+    sort!(loadings, sort_by, by = abs, rev = true)
+    return loadings
+end
+
+# ╔═╡ 653ae9d0-bca6-4778-a8d3-9d07dbf143c2
+function GetLoadingsHeatMap(F, pca_variables; squared=false)
+	k = size(F.U, 2)
+    L = F.U[:, 1:k]
+
+    limit = maximum(abs, L)
+
+    heatmap(
+        1:k,
+        string.(pca_variables),
+        (squared ? L .^ 2 : L);
+        xlabel = "Principal Component",
+        ylabel = "Variable",
+        title = "PCA Loading Heatmap",
+        colorbar_title = "Loading",
+        clims = (squared ? (0, limit) : (-limit, limit)),
+        c = (squared ? :viridis : :RdBu),
+        yflip = true,
+    )
+end
+
+# ╔═╡ af1af019-a784-4144-a632-e66fca8b1c3b
+let
+    # Repeat the PCA with only one condition/lifecycle representative (arbitrarily choosing RSL, we could also try others)
+    pca_vars_single_lf = [
+        :RSL,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :Qty,
+        :AssetAge,
+        :AssetDesignLife,
+        :LogCRV,
+    ]
+    F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, boilers)
+
+    results, GetPCAPlot(8, explained_ratio), GetLoadings(F, pca_vars_single_lf), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true)
 end
 
 # ╔═╡ 5d26ccac-1d20-44f7-8696-440e91eeabf1
@@ -219,11 +398,18 @@ md"""
 # ╟─745d02a7-6b60-47d3-973c-0f428013c265
 # ╟─b078a14b-049e-4398-9c79-85ef7fde2843
 # ╟─78c6cc72-5658-495d-9444-cfa4b4bc582a
-# ╠═64dbadfb-21b1-4ecd-b157-efd6f3a96983
-# ╠═82c5ac02-1bfe-459a-ad49-b5eb84aca954
+# ╟─64dbadfb-21b1-4ecd-b157-efd6f3a96983
 # ╟─b62c7f0d-f9e8-41b6-9eb6-e77f55345806
 # ╟─b23788a2-2890-4417-bb00-9ebd4565b449
-# ╠═0b5304f0-3304-4f32-9070-3348c05797d3
+# ╟─03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
+# ╟─a4346d81-ccfe-4376-9cc6-27973e80c095
+# ╟─e417d3b5-d72d-43d5-8662-ad3eefce447d
+# ╟─4daad98c-f8a2-4430-946e-8efd6189a008
+# ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# ╟─0bf742cc-4661-4a33-bee0-4905860d2562
+# ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
+# ╟─653ae9d0-bca6-4778-a8d3-9d07dbf143c2
+# ╟─af1af019-a784-4144-a632-e66fca8b1c3b
 # ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
 # ╠═5977499b-030f-49b6-a329-a6f746ff1b2b
 # ╟─345182d1-e582-4498-ad3a-daed465891ec
