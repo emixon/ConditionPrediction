@@ -140,88 +140,11 @@ The data wrangling process took care of most of the data reshaping, for the PCA,
 # ╔═╡ 0b5304f0-3304-4f32-9070-3348c05797d3
 begin
 	modes = 15
-	pca_boilers = select(boilers, Not([:Id]))
-	X = Matrix(pca_boilers)' # Transform df into Matrix
+	pca_boilers = select(boilers, Not([:Id])) # Remove :Id column
+	X = Matrix(pca_boilers)' # convert dataframe into Matrix and transform
 	X̄ = mean(X, dims=2) # Get Mean
 	B = X .- X̄ # Get Normalized Matrix
 	F = svd(B) # SVD
-end
-
-# ╔═╡ 44044a33-0f6f-4159-ac89-2d8387ba781a
-begin
-	# Get the feature names
-    column_names = names(pca_boilers) 
-    
-    # 1. Create a DataFrame from the loadings matrix (F.U)
-    # This automatically names columns "x1", "x2", etc.
-    pc_df = DataFrame(F.U, :auto)
-    
-    # 2. Rename the columns to "PC1", "PC2", etc., based on total PCs available
-    num_pcs = size(F.U, 2)
-    rename!(pc_df, [Symbol("PC$i") for i in 1:num_pcs])
-    
-    # 3. Insert the Feature names as the first column
-    insertcols!(pc_df, 1, :Feature => column_names)
-end
-
-# ╔═╡ 889dc13a-0250-4051-8b15-157085c2936d
-total_variance = F.S .^ 2 / (size(B, 2) - 1)
-
-# ╔═╡ afac8034-878f-4fa4-9346-549ae4f6417e
-explained_variance_ratio = total_variance[1:modes] / sum(total_variance)
-
-# ╔═╡ 547e2500-c5e8-4e5b-8b37-fe469b7e85fe
-begin
-    for i in 1:modes
-        println("PC $i: $(round(explained_variance_ratio[i] * 100, digits=2))% variance explained")
-    end
-end
-
-# ╔═╡ 8a5c0007-9b6a-4ad4-8bd2-ef6fa34bdba6
-begin
-	# (Since it was excluded from Id, its index matches its position in names(pca_boilers))
-    score_idx = findfirst(==("Score"), names(pca_boilers))
-    
-    # 2. Extract the loadings for the "Score" variable across your modes
-    # In your row-variable setup, F.Vt columns correspond to original variables
-    score_loadings = F.Vt[1:modes, score_idx]
-    
-    # 3. Calculate the squared loadings (Contribution to the variable's total variance)
-    # This shows how much of "Score" is captured by each individual PC
-    score_contributions = score_loadings .^ 2
-    
-    # Print the exact order of variables in your matrix X
-    for (idx, name) in enumerate(names(pca_boilers))
-        println("  Row $idx in Matrix X = Column '$name' from DataFrame")
-    end
-    println("")
-    # Output the results
-    println("Contribution of each PC to explaining 'Score':")
-    for i in 1:modes
-        pct = round(score_contributions[i] * 100, digits=2)
-        println("  PC $i explains $pct% of the variance in Score")
-    end
-    println("\nTotal variance of 'Score' captured by these $modes components: ", 
-            round(sum(score_contributions) * 100, digits=2), "%")
-
-    #V2
-    # 1. Find the row index of the "Score" column in your matrix B
-    score_idx = findfirst(==("Score"), names(pca_boilers))
-    
-    # 2. Extract the loadings for the "Score" variable across your modes from F.U
-    # F.U[score_idx, 1:modes] gives the weights of "Score" for each principal component
-    score_loadings = F.U[score_idx, 1:modes]
-    
-    # 3. Calculate the squared loadings
-    # Because U is orthogonal, the square of the loading represents the proportion of the variable's variance aligned with that component.
-    score_contributions = score_loadings .^ 2
-    
-    # Output the results
-    println("Contribution of each PC to explaining 'Score':")
-    for i in 1:modes
-        pct = round(score_contributions[i] * 100, digits=2)
-        println("  PC $i accounts for $pct% of the loading profile for Score")
-    end
 end
 
 # ╔═╡ 5d26ccac-1d20-44f7-8696-440e91eeabf1
@@ -301,11 +224,6 @@ md"""
 # ╟─b62c7f0d-f9e8-41b6-9eb6-e77f55345806
 # ╟─b23788a2-2890-4417-bb00-9ebd4565b449
 # ╠═0b5304f0-3304-4f32-9070-3348c05797d3
-# ╠═44044a33-0f6f-4159-ac89-2d8387ba781a
-# ╠═889dc13a-0250-4051-8b15-157085c2936d
-# ╠═afac8034-878f-4fa4-9346-549ae4f6417e
-# ╠═547e2500-c5e8-4e5b-8b37-fe469b7e85fe
-# ╠═8a5c0007-9b6a-4ad4-8bd2-ef6fa34bdba6
 # ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
 # ╠═5977499b-030f-49b6-a329-a6f746ff1b2b
 # ╟─345182d1-e582-4498-ad3a-daed465891ec
