@@ -10,12 +10,13 @@ begin
 
     Pkg.activate(Base.current_project())
     Pkg.instantiate()
-
+    
     using ConditionPrediction
     using DataFrames
     using StatsPlots
     using Statistics
     using LinearAlgebra
+    using StatsBase
 end
 
 # ╔═╡ f92de274-9c7f-4ea2-84a5-d18f97044498
@@ -356,8 +357,41 @@ md"""
 Looking for correlations.
 """
 
-# ╔═╡ 17d5f78e-7188-4496-b00e-36be135fe37f
+# ╔═╡ 5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
+begin
+	# calculate Spearman correlation coefficients
+    spearman_matrix = corspearman(Matrix(boilers))
+end
 
+# ╔═╡ 17d5f78e-7188-4496-b00e-36be135fe37f
+begin
+	# CREATE HEATMAP
+	# create data labels
+	spearman_labels = [
+		"Id",
+		"Spec",
+		"DesignLife",
+		"Qty",
+		"NormalizedAge",
+		"Recency",
+		"PredictedCI",
+		"ActualScore",
+		"CRV",
+		"Fac",
+		"AssetAge",
+		"AssetDesignLife",
+		"PrevScore",
+		"PrevAssessed",
+		"logCRV"
+	]
+
+	# create mask to hide redundant values
+	masked_matrix = copy(spearman_matrix)
+	masked_matrix[triu!(trues(size(masked_matrix)), 1)] .= NaN
+	
+	# plot heatmap
+	heatmap(spearman_labels, spearman_labels, masked_matrix, xrotation = 45, clim = (-1,1), c = :bwr, title = "Spearman Corrrelation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
+end
 
 # ╔═╡ cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
 md"""
@@ -417,6 +451,7 @@ md"""
 # ╟─409978e5-8f83-49f9-b46b-2f39fac7570f
 # ╠═2d22cc12-a322-40de-991b-909889ee6125
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
+# ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 # ╠═17d5f78e-7188-4496-b00e-36be135fe37f
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
 # ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
