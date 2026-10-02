@@ -355,6 +355,7 @@ md"""
 md"""
 ## Regression Analysis
 Looking for correlations.
+### Spearman Correlation Analysis
 """
 
 # ╔═╡ 5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
