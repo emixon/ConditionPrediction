@@ -360,30 +360,29 @@ Looking for correlations.
 
 # ╔═╡ 5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 begin
+	# create matrix for correlation
+	boilers_spearman = Matrix(select(boilers, pca_vars))
 	# calculate Spearman correlation coefficients
-    spearman_matrix = corspearman(Matrix(boilers))
+    spearman_matrix = corspearman(boilers_spearman)
 end
 
 # ╔═╡ 17d5f78e-7188-4496-b00e-36be135fe37f
 begin
 	# CREATE HEATMAP
 	# create data labels
+	
 	spearman_labels = [
-		"Id",
-		"Spec",
-		"DesignLife",
-		"Qty",
 		"NormalizedAge",
-		"Recency",
-		"PredictedCI",
-		"ActualScore",
-		"CRV",
-		"Fac",
-		"AssetAge",
-		"AssetDesignLife",
-		"PrevScore",
-		"PrevAssessed",
-		"logCRV"
+        "EffectiveAge",
+        "RSL",
+        "Recency",
+        "PrevScore",
+        "PrevAssessed",
+        "PredictedCI",
+        "Qty",
+        "AssetAge",
+        "AssetDesignLife",
+        "LogCRV",
 	]
 
 	# create mask to hide redundant values
@@ -433,10 +432,10 @@ md"""
 # ╟─745d02a7-6b60-47d3-973c-0f428013c265
 # ╟─b078a14b-049e-4398-9c79-85ef7fde2843
 # ╟─78c6cc72-5658-495d-9444-cfa4b4bc582a
-# ╟─64dbadfb-21b1-4ecd-b157-efd6f3a96983
+# ╠═64dbadfb-21b1-4ecd-b157-efd6f3a96983
 # ╟─b62c7f0d-f9e8-41b6-9eb6-e77f55345806
 # ╟─b23788a2-2890-4417-bb00-9ebd4565b449
-# ╟─03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
+# ╠═03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
 # ╟─a4346d81-ccfe-4376-9cc6-27973e80c095
 # ╟─e417d3b5-d72d-43d5-8662-ad3eefce447d
 # ╟─4daad98c-f8a2-4430-946e-8efd6189a008
