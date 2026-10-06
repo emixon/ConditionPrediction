@@ -96,6 +96,7 @@ Once the new :PrevAssessed column is created, we will replace "missing" values w
 
 # ╔═╡ b078a14b-049e-4398-9c79-85ef7fde2843
 begin
+	boilers_raw_data = boilers
 	boilers.PrevAssessed = Int.(.!ismissing.(boilers.PrevScore))
 	
 	mean_PrevScore = mean(skipmissing(boilers.PrevScore))
@@ -354,21 +355,85 @@ md"""
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 md"""
 ## Regression Analysis
-Looking for correlations.
+"""
+
+# ╔═╡ 90916ca7-d937-4a85-b40d-a69c23e38562
+md"""
+### Pearson Correlation Analysis
+"""
+
+# ╔═╡ d832c11a-a8b3-4f92-9a30-caccc1d6b28e
+begin
+
+	# The Columns we want to use for the correlation analysis
+    cor_vars = [
+        :NormalizedAge,
+        :EffectiveAge,
+        :RSL,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :PredictedCI,
+        :Score,
+        :Qty,
+        :AssetAge,
+        :AssetDesignLife,
+        :LogCRV,
+    ]
+    
+	# create matrix for Pearson correlation
+	boilers_cor = Matrix(select(boilers_raw_data, cor_vars))
+	
+    # calculate Spearman correlation coefficients
+    pearson_matrix = cor(boilers_cor)
+end
+
+# ╔═╡ c971b211-e043-47b3-88b7-ad73b6872796
+begin
+	# CREATE HEATMAP
+
+	# create data labels
+	
+	pearson_labels = [
+		"NormalizedAge",
+        "EffectiveAge",
+        "RSL",
+        "Recency",
+        "PrevScore",
+        "PrevAssessed",
+        "PredictedCI",
+        "Score",
+        "Qty",
+        "AssetAge",
+        "AssetDesignLife",
+        "LogCRV",
+	]
+
+	# create mask to hide redundant values
+	pearson_matrix_masked = copy(pearson_matrix)
+	pearson_matrix_masked[triu!(trues(size(pearson_matrix_masked)), 1)] .= NaN
+	
+	# plot heatmap
+	heatmap(pearson_labels, pearson_labels, pearson_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, title = "Pearson Corrrelation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
+end
+
+# ╔═╡ b9c194d6-87fe-459e-82f6-e551d4889747
+md"""
 ### Spearman Correlation Analysis
 """
 
 # ╔═╡ 5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 begin
 	# create matrix for correlation
-	boilers_spearman = Matrix(select(boilers, pca_vars))
+	boilers_spearman = Matrix(select(boilers_raw_data, cor_vars))
 	# calculate Spearman correlation coefficients
-    spearman_matrix = corspearman(boilers_spearman)
+    spearman_matrix = corspearman(boilers_cor)
 end
 
 # ╔═╡ 17d5f78e-7188-4496-b00e-36be135fe37f
 begin
-	# CREATE HEATMAP
+	# CREATE SPEARMAN HEATMAP
+
 	# create data labels
 	
 	spearman_labels = [
@@ -379,6 +444,7 @@ begin
         "PrevScore",
         "PrevAssessed",
         "PredictedCI",
+        "Score",
         "Qty",
         "AssetAge",
         "AssetDesignLife",
@@ -386,11 +452,11 @@ begin
 	]
 
 	# create mask to hide redundant values
-	masked_matrix = copy(spearman_matrix)
-	masked_matrix[triu!(trues(size(masked_matrix)), 1)] .= NaN
+	spearman_matrix_masked = copy(spearman_matrix)
+	spearman_matrix_masked[triu!(trues(size(spearman_matrix_masked)), 1)] .= NaN
 	
 	# plot heatmap
-	heatmap(spearman_labels, spearman_labels, masked_matrix, xrotation = 45, clim = (-1,1), c = :bwr, title = "Spearman Corrrelation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
+	heatmap(spearman_labels, spearman_labels, spearman_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, title = "Spearman Corrrelation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
 end
 
 # ╔═╡ cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
@@ -424,13 +490,13 @@ md"""
 # ╟─f92de274-9c7f-4ea2-84a5-d18f97044498
 # ╠═af5b14a9-9e5b-42d4-bc68-abf314fc3928
 # ╟─5ca1e039-ee02-4467-95e0-8f44cb4995db
-# ╟─9371dd2a-8673-4104-b04b-4d91a597427a
+# ╠═9371dd2a-8673-4104-b04b-4d91a597427a
 # ╟─43ee48fd-370d-412e-968f-3df0c2b7c422
 # ╟─3426ad4c-a340-46c3-994a-0e30dccef086
 # ╟─942ad3ee-eab0-465e-b6d8-f36112bc4bec
 # ╠═8e86278f-bbec-4f50-8961-41a45bf2aa94
 # ╟─745d02a7-6b60-47d3-973c-0f428013c265
-# ╟─b078a14b-049e-4398-9c79-85ef7fde2843
+# ╠═b078a14b-049e-4398-9c79-85ef7fde2843
 # ╟─78c6cc72-5658-495d-9444-cfa4b4bc582a
 # ╠═64dbadfb-21b1-4ecd-b157-efd6f3a96983
 # ╟─b62c7f0d-f9e8-41b6-9eb6-e77f55345806
@@ -451,6 +517,10 @@ md"""
 # ╟─409978e5-8f83-49f9-b46b-2f39fac7570f
 # ╠═2d22cc12-a322-40de-991b-909889ee6125
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
+# ╟─90916ca7-d937-4a85-b40d-a69c23e38562
+# ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
+# ╠═c971b211-e043-47b3-88b7-ad73b6872796
+# ╟─b9c194d6-87fe-459e-82f6-e551d4889747
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 # ╠═17d5f78e-7188-4496-b00e-36be135fe37f
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
