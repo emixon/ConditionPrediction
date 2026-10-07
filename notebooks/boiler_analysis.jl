@@ -88,9 +88,11 @@ select!(boilers, Not([:MEC, :System, :UOM]))
 # ╔═╡ 745d02a7-6b60-47d3-973c-0f428013c265
 md"""
 ### Addressing observations with missing data
-The :Recency and :PrevScore columns of the data will have "missing" data for cases where the component has never been assessed before. Since knowing the component has never been assessed could carry its own predictive value, we cannot simply replace "missing" with the mean values in this case. We must first create a new column of Type Bit {0, 1} that preserves the information of a component having previously been assessed or "never assessed".  In this case we will create a column named :PrevAssessed set to 0 for "missing" values and 1 for values that have been assessed in the past.
+The :Recency and :PrevScore columns of the data will have "missing" data for cases where the component has never been assessed before. Additionaly, not all components have climate data. Since knowing the component has never been assessed could carry its own predictive value, we cannot simply replace "missing" with the mean values in this case. We must first create a new column of Type Bit {0, 1} that preserves the information of a component having previously been assessed or "never assessed".  In this case we will create a column named :PrevAssessed set to 0 for "missing" values and 1 for values that have been assessed in the past.
 
 Once the new :PrevAssessed column is created, we will replace "missing" values with the mean of their respective columns, thus addressing the missing values without losing predictive information.
+
+For the missing Climate data, we will simply replace "missing" values with the mean for available data prior to PCA.
 """
 
 # ╔═╡ b078a14b-049e-4398-9c79-85ef7fde2843
@@ -100,9 +102,11 @@ begin
 	
 	mean_PrevScore = mean(skipmissing(boilers.PrevScore))
 	mean_Recency = mean(skipmissing(boilers.Recency))
+	mean_Climate = mean(skipmissing(boilers.Climate))
 	
 	boilers.PrevScore = coalesce.(boilers.PrevScore, mean_PrevScore)
 	boilers.Recency = coalesce.(boilers.Recency, mean_Recency)
+	boilers.Climate = coalesce.(boilers.Climate, mean_Climate)
 
 	# New Boilers df
 	boilers
@@ -155,6 +159,9 @@ begin
         :AssetAge,
         :AssetDesignLife,
         :LogCRV,
+        :Year,
+        :Month,
+        :Climate
     ]
 
     X = Matrix(select(boilers, pca_vars))' # Select columns, convert to matrix, and transform
@@ -207,6 +214,9 @@ begin
         PC9 = F.U[:, 9],
         PC10 = F.U[:, 10],
         PC11 = F.U[:, 11],
+        PC12 = F.U[:, 12],
+        PC13 = F.U[:, 13],
+        PC14 = F.U[:, 14],
     )
 
     sort!(loadings, :PC1, by=abs, rev=true)
@@ -321,6 +331,9 @@ let
         :AssetAge,
         :AssetDesignLife,
         :LogCRV,
+        :Month,
+        :Year,
+        :Climate
     ]
     F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, boilers)
 
@@ -378,6 +391,9 @@ begin
         :AssetAge,
         :AssetDesignLife,
         :LogCRV,
+        :Month,
+        :Year,
+        :Climate
     ]
     
 	# create matrix for Pearson correlation
@@ -406,6 +422,9 @@ begin
         "AssetAge",
         "AssetDesignLife",
         "LogCRV",
+        "Month",
+        "Year",
+        "Climate"
 	]
 
 	# create mask to hide redundant values
@@ -448,6 +467,9 @@ begin
         "AssetAge",
         "AssetDesignLife",
         "LogCRV",
+        "Month",
+        "Year",
+        "Climate"
 	]
 
 	# create mask to hide redundant values
@@ -455,7 +477,7 @@ begin
 	spearman_matrix_masked[triu!(trues(size(spearman_matrix_masked)), 1)] .= NaN
 	
 	# plot heatmap
-	heatmap(spearman_labels, spearman_labels, spearman_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, title = "Spearman Corrrelation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
+	heatmap(spearman_labels, spearman_labels, spearman_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, title = "Spearman Correlation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
 end
 
 # ╔═╡ cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
@@ -502,12 +524,12 @@ md"""
 # ╟─b23788a2-2890-4417-bb00-9ebd4565b449
 # ╠═03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
 # ╟─a4346d81-ccfe-4376-9cc6-27973e80c095
-# ╟─e417d3b5-d72d-43d5-8662-ad3eefce447d
+# ╠═e417d3b5-d72d-43d5-8662-ad3eefce447d
 # ╟─4daad98c-f8a2-4430-946e-8efd6189a008
 # ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
 # ╟─0bf742cc-4661-4a33-bee0-4905860d2562
 # ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
-# ╟─653ae9d0-bca6-4778-a8d3-9d07dbf143c2
+# ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
 # ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
 # ╠═5977499b-030f-49b6-a329-a6f746ff1b2b
