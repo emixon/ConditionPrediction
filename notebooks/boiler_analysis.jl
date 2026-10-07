@@ -29,14 +29,9 @@ It also defines a helper function called getHistAll that plots 12 basic histogra
 
 # ╔═╡ af5b14a9-9e5b-42d4-bc68-abf314fc3928
 begin
-    path = joinpath( @__DIR__, "..", "data", "observations.csv")
-
-    # MEC analysis for 171 "Boilers"
-    MEC = 171
+    path = joinpath( @__DIR__, "..", "data", "boilers.csv")
     MEC_Name = "Boilers"
-
-    df = load_data(path)
-    boilers = df[df.MEC .== MEC, :]
+    boilers = load_data(path)
     function getHistAll(d)
         plot(
             histogram(d.NormalizedAge; bins=100, title="$MEC_Name Normalized Age"),
@@ -51,7 +46,11 @@ begin
             histogram(d.CRV; bins=100, title="$MEC_Name Component Replacement Value"),
             histogram(d.Fac, title="$MEC_Name Facility Code"),
             histogram(d.AssetAge, title="$MEC_Name Asset Age"),
-            layout=(4, 3), size=(2400, 1800)
+            histogram(d.Month, bins=12, title="$MEC_Name Month of Assessment"),
+            histogram(d.Year, title="$MEC_Name Year of Assessment"),
+            histogram(d.Climate, title="$MEC_Name Climate"),
+            histogram(d.AssetDesignLife, title="$MEC_Name Asset Design Life"),
+            layout=(4, 4), size=(2400, 1800)
         )
     end
 
@@ -509,7 +508,7 @@ md"""
 # ╟─0bf742cc-4661-4a33-bee0-4905860d2562
 # ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
 # ╟─653ae9d0-bca6-4778-a8d3-9d07dbf143c2
-# ╟─af1af019-a784-4144-a632-e66fca8b1c3b
+# ╠═af1af019-a784-4144-a632-e66fca8b1c3b
 # ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
 # ╠═5977499b-030f-49b6-a329-a6f746ff1b2b
 # ╟─345182d1-e582-4498-ad3a-daed465891ec
