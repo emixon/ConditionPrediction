@@ -22,8 +22,8 @@ jobs:
       - name: Compile LaTeX document
         uses: xu-cheng/latex-action@v4
         with:
-          root_file: ./cee492_final_report.tex
-          working_directory: ./reports/final/
+          root_file: ./exploratory.tex
+          working_directory: ./reports/exploratory/
 
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v7
