@@ -372,29 +372,146 @@ begin
     group_summary
 end
 
+# ╔═╡ 359b5901-74ec-4b8f-9e7c-7c906f943dec
+function compare_histogram(variable, heading)
+    green = collect(skipmissing(green_boilers[!, variable]))
+    notgreen = collect(skipmissing(notgreen_boilers[!, variable]))
+
+    if isempty(green) || isempty(notgreen)
+        error("Both groups need recorded values for $variable.")
+    end
+
+    # Use the same intervals for both groups.
+    values = vcat(green, notgreen)
+    low, high = extrema(values)
+
+    if low == high
+        low -= 0.5
+        high += 0.5
+    end
+
+    edges = range(low, nextfloat(Float64(high)); length=31)
+
+    p = histogram(
+        green;
+        bins=edges, normalize=:probability, alpha=0.5,
+        label="Green (n=$(length(green)))",
+        title=heading, xlabel=heading,
+        ylabel="Proportion within group",
+        legend=:topright,
+    )
+
+    histogram!(
+        p, notgreen;
+        bins=edges, normalize=:probability, alpha=0.5,
+        label="Not green (n=$(length(notgreen)))",
+    )
+
+    return p
+end
+
 # ╔═╡ 5d26ccac-1d20-44f7-8696-440e91eeabf1
 md"""
 ## Interesting Plot 1
 """
 
-# ╔═╡ 5977499b-030f-49b6-a329-a6f746ff1b2b
+# ╔═╡ e7fae12f-3e0b-4e9f-a874-4cb0db599494
+interesting_plot1 = let
+    p1 = compare_histogram(:NormalizedAge, "Normalized Age")
+    p2 = compare_histogram(:RSL, "Remaining Service Life")
+    p3 = compare_histogram(:AssetAge, "Asset Age")
+    p4 = compare_histogram(:PrevScore, "Previous Assessment Score")
 
+    plot(
+        p1, p2, p3, p4;
+        layout=(2, 2),
+        size=(1200, 900),
+        titlefontsize=11,
+        guidefontsize=10,
+        legendfontsize=8,
+    )
+end
 
 # ╔═╡ 345182d1-e582-4498-ad3a-daed465891ec
 md"""
 ## Interesting Plot 2
 """
 
-# ╔═╡ 58e54b9a-1e54-4354-b8f7-005b58e7ff67
+# ╔═╡ 33f8fa4d-737b-4f2e-9a8c-da0715e7b332
+function notgreen_plot(data, column, heading; top=0)
+    d = dropmissing(data, [:Score, column])
+    d.NotGreen = d.Score .< 88
 
+    summary = combine(
+        groupby(d, column; sort=true),
+        nrow => :N,
+        :NotGreen => sum => :NotGreen,
+    )
+
+    summary.Percent = 100 .* summary.NotGreen ./ summary.N
+
+    # Used only when selecting the most-observed facility codes.
+    if top > 0
+        summary = summary[summary.N .>= 50, :]
+        sort!(summary, :N; rev=true)
+        summary = first(summary, top)
+    end
+
+    if nrow(summary) == 0
+        error("No categories available for $column.")
+    end
+
+    labels = [
+        "$(summary[i, column])\n(n=$(summary.N[i]))"
+        for i in 1:nrow(summary)
+    ]
+
+    p = bar(
+        1:nrow(summary), summary.Percent;
+        xticks=(1:nrow(summary), labels),
+        title=heading, ylabel="Not green (%)",
+        ylims=(0, 100), label="",
+        legend=:topright,
+    )
+
+    overall = 100 * mean(d.NotGreen)
+
+    hline!(
+        p, [overall];
+        linestyle=:dash,
+        label="Overall = $(round(overall; digits=1))%",
+    )
+
+    return p
+end
+
+# ╔═╡ 9b583d56-dab5-4f2a-b5a7-8199b0eea251
+interesting_plot2 = let
+    d = copy(comparison_data)
+
+    # Keep missing climate as a named category.
+    d.ClimateGroup = string.(coalesce.(d.Climate, "Missing"))
+
+    p1 = notgreen_plot(d, :Month, "Assessment Month: 1 = Jan, 12 = Dec")
+    p2 = notgreen_plot(d, :Year, "Assessment Year")
+    p3 = notgreen_plot(d, :ClimateGroup, "Climate Code")
+
+    plot!(p2; xrotation=45)
+
+    plot(
+        p1, p2, p3;
+        layout=(3, 1),
+        size=(1300, 1300),
+        titlefontsize=12,
+        tickfontsize=8,
+        legendfontsize=9,
+    )
+end
 
 # ╔═╡ 409978e5-8f83-49f9-b46b-2f39fac7570f
 md"""
 ## Interesting Plot 3
 """
-
-# ╔═╡ 2d22cc12-a322-40de-991b-909889ee6125
-
 
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 md"""
@@ -566,12 +683,13 @@ md"""
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
 # ╟─7606e704-083e-4a5f-8da5-bcdf3bfa3216
 # ╠═12b33241-044c-4631-a9b9-e9c44e24847a
+# ╠═359b5901-74ec-4b8f-9e7c-7c906f943dec
 # ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
-# ╠═5977499b-030f-49b6-a329-a6f746ff1b2b
+# ╠═e7fae12f-3e0b-4e9f-a874-4cb0db599494
 # ╟─345182d1-e582-4498-ad3a-daed465891ec
-# ╠═58e54b9a-1e54-4354-b8f7-005b58e7ff67
+# ╠═33f8fa4d-737b-4f2e-9a8c-da0715e7b332
+# ╠═9b583d56-dab5-4f2a-b5a7-8199b0eea251
 # ╟─409978e5-8f83-49f9-b46b-2f39fac7570f
-# ╠═2d22cc12-a322-40de-991b-909889ee6125
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
