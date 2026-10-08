@@ -37,4 +37,4 @@ jobs:
         with:
           name: exploratory-analysis-pdf 
           archive: false
-          path: ./reports/report/exploratory.pdf
+          path: ./reports/exploratory/exploratory.pdf
