@@ -19,6 +19,9 @@ begin
     using StatsBase
 end
 
+# ╔═╡ 8a745a37-637c-49e7-9b80-a00e35e2134d
+
+
 # ╔═╡ f92de274-9c7f-4ea2-84a5-d18f97044498
 md"""
 ### Load Data and Overview
@@ -31,7 +34,9 @@ It also defines a helper function called getHistAll that plots 12 basic histogra
 begin
     path = joinpath( @__DIR__, "..", "data", "boilers.csv")
     MEC_Name = "Boilers"
-    boilers = load_data(path)
+
+    df = load_data(path)
+    boilers = df[df.MEC .== MEC, :]
     function getHistAll(d)
         plot(
             histogram(d.NormalizedAge; bins=100, title="$MEC_Name Normalized Age"),
@@ -508,6 +513,7 @@ md"""
 
 # ╔═╡ Cell order:
 # ╠═e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
+# ╠═8a745a37-637c-49e7-9b80-a00e35e2134d
 # ╟─f92de274-9c7f-4ea2-84a5-d18f97044498
 # ╠═af5b14a9-9e5b-42d4-bc68-abf314fc3928
 # ╟─5ca1e039-ee02-4467-95e0-8f44cb4995db
