@@ -139,6 +139,11 @@ end
 md"""
 ## Principal Component Analysis
 In our goal to predict assessment scores for a given component, it is useful to perform a principal component analysis to identify which properties of the observation provide the majority of the variance. This allows us to de-noise our prediction models by omitting properties that have very little contribution to the information.
+
+To simplify the model somewhat in a reasonable way for identifying score predictors. We can simplify the classification of scores from the 9 possible ratings to simply Red, Amber, and Green Scores, which is to say bucket scores that are >= 88 as Green, scores >= 60 < 88 as Amber and scores < 60 as Red.  This helps lend itself to identifying the distinction between components being well maintained in a functional state (Green) and components being neglected.  The key question becomes, "Can we identify patterns and key factors that differentiate between well maintained and poorly maintained components".
+
+To do this, we will first omit the Score property from the PCA analysis to avoid data leakage and then reintroduce it after to color code the follow up by Red,Amber,Green scores that have been backloaded into the resulting PC space.
+
 """
 
 # ╔═╡ b23788a2-2890-4417-bb00-9ebd4565b449
@@ -166,7 +171,8 @@ begin
         :LogCRV,
         :Year,
         :Month,
-        :Climate
+        :Climate,
+        :Fac
     ]
 
     X = Matrix(select(boilers, pca_vars))' # Select columns, convert to matrix, and transform
@@ -222,6 +228,7 @@ begin
         PC12 = F.U[:, 12],
         PC13 = F.U[:, 13],
         PC14 = F.U[:, 14],
+        PC15 = F.U[:, 15],
     )
 
     sort!(loadings, :PC1, by=abs, rev=true)
@@ -287,6 +294,7 @@ function GetPCAPlot(modes, explained_ratio)
         ylabel = "Explained Variance (%)",
         title = "Boiler PCA Plot",
         legend = false,
+        size=(1000, 800)
     )
 end
 
@@ -321,6 +329,7 @@ function GetLoadingsHeatMap(F, pca_variables; squared=false)
         clims = (squared ? (0, limit) : (-limit, limit)),
         c = (squared ? :viridis : :RdBu),
         yflip = true,
+        size=(1000, 800)
     )
 end
 
@@ -338,11 +347,12 @@ let
         :LogCRV,
         :Month,
         :Year,
-        :Climate
+        :Climate,
+        :Fac
     ]
     F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, boilers)
 
-    results, GetPCAPlot(8, explained_ratio), GetLoadings(F, pca_vars_single_lf), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true)
+    plot(GetPCAPlot(12, explained_ratio), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true), size=(2000, 800))
 end
 
 # ╔═╡ 7606e704-083e-4a5f-8da5-bcdf3bfa3216
@@ -675,30 +685,30 @@ md"""
 # ╟─a4346d81-ccfe-4376-9cc6-27973e80c095
 # ╠═e417d3b5-d72d-43d5-8662-ad3eefce447d
 # ╟─4daad98c-f8a2-4430-946e-8efd6189a008
-# ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
-# ╟─0bf742cc-4661-4a33-bee0-4905860d2562
-# ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
+# ╠═ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# ╠═0bf742cc-4661-4a33-bee0-4905860d2562
+# ╠═e39f1b09-9bce-40d5-b5d9-03946bffe6fe
 # ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
-# ╟─7606e704-083e-4a5f-8da5-bcdf3bfa3216
+# ╠═7606e704-083e-4a5f-8da5-bcdf3bfa3216
 # ╠═12b33241-044c-4631-a9b9-e9c44e24847a
 # ╠═359b5901-74ec-4b8f-9e7c-7c906f943dec
-# ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
+# ╠═5d26ccac-1d20-44f7-8696-440e91eeabf1
 # ╠═e7fae12f-3e0b-4e9f-a874-4cb0db599494
-# ╟─345182d1-e582-4498-ad3a-daed465891ec
+# ╠═345182d1-e582-4498-ad3a-daed465891ec
 # ╠═33f8fa4d-737b-4f2e-9a8c-da0715e7b332
 # ╠═9b583d56-dab5-4f2a-b5a7-8199b0eea251
-# ╟─409978e5-8f83-49f9-b46b-2f39fac7570f
-# ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
-# ╟─90916ca7-d937-4a85-b40d-a69c23e38562
+# ╠═409978e5-8f83-49f9-b46b-2f39fac7570f
+# ╠═2a9579fc-6ec0-4741-859a-6c9105dc8f7d
+# ╠═90916ca7-d937-4a85-b40d-a69c23e38562
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
 # ╠═c971b211-e043-47b3-88b7-ad73b6872796
-# ╟─b9c194d6-87fe-459e-82f6-e551d4889747
+# ╠═b9c194d6-87fe-459e-82f6-e551d4889747
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 # ╠═17d5f78e-7188-4496-b00e-36be135fe37f
-# ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
-# ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
+# ╠═cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
+# ╠═e553e6b3-7b8e-4029-b823-eb98362c49a4
 # ╠═c4f0042e-dac8-4caf-b983-8bc9678b4d1b
-# ╟─c2324815-aa18-43a0-b9f3-cd7dbcde5647
+# ╠═c2324815-aa18-43a0-b9f3-cd7dbcde5647
 # ╠═8bc9c3b1-0ffb-451b-bae9-bf3d209355b6
-# ╟─2defcea8-94d2-4182-b313-7b242d185c08
+# ╠═2defcea8-94d2-4182-b313-7b242d185c08
