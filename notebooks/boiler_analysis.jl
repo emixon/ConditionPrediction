@@ -425,10 +425,10 @@ interesting_plot1 = let
     plot(
         p1, p2, p3, p4;
         layout=(2, 2),
-        size=(1200, 900),
-        titlefontsize=11,
+        size=(1000, 1000),
+        titlefontsize=10,
         guidefontsize=10,
-        legendfontsize=8,
+        legendfontsize=10,
     )
 end
 
@@ -489,7 +489,6 @@ end
 interesting_plot2 = let
     d = copy(comparison_data)
 
-    # Keep missing climate as a named category.
     d.ClimateGroup = string.(coalesce.(d.Climate, "Missing"))
 
     p1 = notgreen_plot(d, :Month, "Assessment Month: 1 = Jan, 12 = Dec")
@@ -501,10 +500,10 @@ interesting_plot2 = let
     plot(
         p1, p2, p3;
         layout=(3, 1),
-        size=(1300, 1300),
-        titlefontsize=12,
-        tickfontsize=8,
-        legendfontsize=9,
+        size=(1000, 1000),
+        titlefontsize=10,
+        tickfontsize=10,
+        legendfontsize=10,
     )
 end
 
