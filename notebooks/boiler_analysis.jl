@@ -34,9 +34,9 @@ It also defines a helper function called getHistAll that plots 12 basic histogra
 begin
     path = joinpath( @__DIR__, "..", "data", "boilers.csv")
     MEC_Name = "Boilers"
-
+    MEC = 1
     df = load_data(path)
-    boilers = df[df.MEC .== MEC, :]
+    boilers = df[df. MEC .== MEC, :]
     function getHistAll(d)
         plot(
             histogram(d.NormalizedAge; bins=100, title="$MEC_Name Normalized Age"),
@@ -345,6 +345,33 @@ let
     results, GetPCAPlot(8, explained_ratio), GetLoadings(F, pca_vars_single_lf), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true)
 end
 
+# ╔═╡ 7606e704-083e-4a5f-8da5-bcdf3bfa3216
+md"""
+## Two Comparison Groups
+"""
+
+# ╔═╡ 12b33241-044c-4631-a9b9-e9c44e24847a
+begin
+    # Load separate data
+    comparison_data = dropmissing(load_data(path), :Score)
+
+    # Separate observations by assessment score.
+    green_boilers = comparison_data[comparison_data.Score .>= 88, :]
+    notgreen_boilers = comparison_data[comparison_data.Score .< 88, :]
+
+    # Count observations
+    group_summary = DataFrame(
+        Group = ["Green (Score >= 88)", "Not green (Score < 88)"],
+        N = [nrow(green_boilers), nrow(notgreen_boilers)],
+    )
+    # Calculate the percentage
+    group_summary.Percent = round.(
+        100 .* group_summary.N ./ sum(group_summary.N);
+        digits =2,
+    )
+    group_summary
+end
+
 # ╔═╡ 5d26ccac-1d20-44f7-8696-440e91eeabf1
 md"""
 ## Interesting Plot 1
@@ -537,6 +564,8 @@ md"""
 # ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
 # ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
+# ╟─7606e704-083e-4a5f-8da5-bcdf3bfa3216
+# ╠═12b33241-044c-4631-a9b9-e9c44e24847a
 # ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
 # ╠═5977499b-030f-49b6-a329-a6f746ff1b2b
 # ╟─345182d1-e582-4498-ad3a-daed465891ec
