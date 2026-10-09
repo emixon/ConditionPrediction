@@ -112,6 +112,7 @@ begin
 	boilers.PrevScore = coalesce.(boilers.PrevScore, mean_PrevScore)
 	boilers.Recency = coalesce.(boilers.Recency, mean_Recency)
 	boilers.Climate = coalesce.(boilers.Climate, mean_Climate)
+	boilers.NormalizedAssetAge = boilers.AssetAge ./ boilers.AssetDesignLife
 
 	# New Boilers df
 	boilers
@@ -273,6 +274,7 @@ function CalcSVDAndExplainedVariance(pca_variables, df)
     explained_variance = F.S .^ 2 ./ (size(Z, 2) - 1)
     explained_ratio = explained_variance ./ sum(explained_variance)
     cumulative_ratio = cumsum(explained_ratio)
+    scores = F.Vt' * Diagonal(F.S)
 
     results = DataFrame(
         PC = 1:length(F.S),
@@ -280,7 +282,7 @@ function CalcSVDAndExplainedVariance(pca_variables, df)
         ExplainedRatio = explained_ratio,
         CumulativeRatio = cumulative_ratio,
     )
-    return F, results, explained_variance, explained_ratio
+    return F, results, explained_variance, explained_ratio, scores
 end
 
 # ╔═╡ 0bf742cc-4661-4a33-bee0-4905860d2562
@@ -333,6 +335,85 @@ function GetLoadingsHeatMap(F, pca_variables; squared=false)
     )
 end
 
+# ╔═╡ 86170372-b428-4e4c-b817-2e2a3be9f8c8
+function GetScoreClassProjection(
+    scores,
+    score,
+    pc_x,
+    pc_y;
+    threshold = 85,
+)
+    green = score .> threshold
+    amber_red = .!green
+
+    p = scatter(
+        scores[amber_red, pc_y],
+        scores[amber_red, pc_x];
+        color = :orange,
+        alpha = 0.18,
+        markersize = 2,
+        markerstrokewidth = 0,
+        label = "Score ≤ $threshold",
+        xlabel = "PC$pc_x Score",
+        ylabel = "PC$pc_y Score",
+        title = "Score Groups: PC$pc_x vs. PC$pc_y",
+    )
+
+    scatter!(
+        p,
+        scores[green, pc_y],
+        scores[green, pc_x];
+        color = :green,
+        alpha = 0.18,
+        markersize = 2,
+        markerstrokewidth = 0,
+        label = "Score > $threshold",
+    )
+
+    return p
+end
+
+# ╔═╡ e346bbf0-066e-4de6-bcdd-6c2732756d17
+function GetPCScoreHistogram(
+    scores,
+    score,
+    pc;
+    threshold = 85,
+    nbins = 100,
+)
+    x = scores[:, pc]
+
+    green = score .> threshold
+    amber_red = .!green
+
+    # Use identical bin edges for both groups.
+    bins = range(minimum(x), maximum(x), length = nbins + 1)
+
+    p = histogram(
+        x[amber_red];
+        bins = bins,
+        normalize = :pdf,
+        color = :orange,
+        alpha = 0.55,
+        xlabel = "PC$pc Score",
+        ylabel = "Density",
+        title = "PC$pc Score Distribution",
+        label = "Score ≤ $threshold",
+    )
+
+    histogram!(
+        p,
+        x[green];
+        bins = bins,
+        normalize = :pdf,
+        color = :green,
+        alpha = 0.45,
+        label = "Score > $threshold",
+    )
+
+    return p
+end
+
 # ╔═╡ af1af019-a784-4144-a632-e66fca8b1c3b
 let
     # Repeat the PCA with only one condition/lifecycle representative (arbitrarily choosing RSL, we could also try others)
@@ -342,17 +423,89 @@ let
         :PrevScore,
         :PrevAssessed,
         :Qty,
-        :AssetAge,
-        :AssetDesignLife,
+        :NormalizedAssetAge,
+        #:AssetAge,
+        #:AssetDesignLife,
         :LogCRV,
         :Month,
-        :Year,
+        #:Year,
         :Climate,
         :Fac
     ]
-    F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, boilers)
 
-    plot(GetPCAPlot(12, explained_ratio), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true), size=(2000, 800))
+    print(pca_vars_single_lf)
+
+    modes = length(pca_vars_single_lf)
+    
+    F, results, explained_variance, explained_ratio, scores = CalcSVDAndExplainedVariance(pca_vars_single_lf, boilers)
+
+    plots = plot(GetPCAPlot(modes, explained_ratio), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true), size=(2000, 800))
+    loadings = GetLoadings(F, pca_vars_single_lf)
+
+    # pairs = []
+    # for x in 1:modes
+    #     for y in 1:modes
+    #         push!(pairs, (x, y))
+    #     end
+    # end
+
+    # projection_plots = [
+    #     GetScoreClassProjection(scores, boilers.Score, pc_x, pc_y)
+    #     for (pc_x, pc_y) in pairs
+    # ]
+    
+    # plot(
+    #     projection_plots...;
+    #     layout = (modes^2 ÷ 2), 2),
+    #     size = (2000, 10000),
+    # )
+
+    histogram_plots = [
+        GetPCScoreHistogram(scores, boilers.Score, pc)
+        for pc in 1:modes
+    ]
+
+    plot(
+        histogram_plots...;
+        layout = (2, modes÷2),
+        size = (2400, 850),
+    )
+end
+
+# ╔═╡ ee72c729-a93a-4ceb-a091-0dd32d1e0555
+md"""
+### Repeat by scaling lifecycle variables
+It is also valid to scale the lifecycle variables to reduce their combined contribution. However results show that they are still relatively dominant.
+"""
+
+# ╔═╡ eecfb266-cd30-4f02-a1e5-61f9427d42d7
+let
+    # Repeat the PCA dividing each lifecycle variable by 4
+    pca_vars_single_lf = [
+        :NormalizedAge,
+        :EffectiveAge,
+        :RSL,
+        :PredictedCI,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :Qty,
+        :AssetAge,
+        :AssetDesignLife,
+        :LogCRV,
+        :Year,
+        :Month,
+        :Climate,
+        :Fac
+    ]
+    adjusted_lifecycle_df = boilers
+    adjusted_lifecycle_df.NormalizedAge = adjusted_lifecycle_df.NormalizedAge ./ 4
+    adjusted_lifecycle_df.EffectiveAge = adjusted_lifecycle_df.EffectiveAge ./ 4
+    adjusted_lifecycle_df.RSL = adjusted_lifecycle_df.RSL ./ 4
+    adjusted_lifecycle_df.PredictedCI = adjusted_lifecycle_df.PredictedCI ./ 4
+    F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, adjusted_lifecycle_df)
+
+    plot(GetPCAPlot(15, explained_ratio), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true), size=(2000, 800))
 end
 
 # ╔═╡ 7606e704-083e-4a5f-8da5-bcdf3bfa3216
@@ -681,15 +834,19 @@ md"""
 # ╠═64dbadfb-21b1-4ecd-b157-efd6f3a96983
 # ╟─b62c7f0d-f9e8-41b6-9eb6-e77f55345806
 # ╟─b23788a2-2890-4417-bb00-9ebd4565b449
-# ╠═03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
+# ╟─03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
 # ╟─a4346d81-ccfe-4376-9cc6-27973e80c095
-# ╠═e417d3b5-d72d-43d5-8662-ad3eefce447d
+# ╟─e417d3b5-d72d-43d5-8662-ad3eefce447d
 # ╟─4daad98c-f8a2-4430-946e-8efd6189a008
 # ╠═ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
-# ╠═0bf742cc-4661-4a33-bee0-4905860d2562
-# ╠═e39f1b09-9bce-40d5-b5d9-03946bffe6fe
-# ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
+# ╟─0bf742cc-4661-4a33-bee0-4905860d2562
+# ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
+# ╟─653ae9d0-bca6-4778-a8d3-9d07dbf143c2
+# ╠═86170372-b428-4e4c-b817-2e2a3be9f8c8
+# ╠═e346bbf0-066e-4de6-bcdd-6c2732756d17
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
+# ╟─ee72c729-a93a-4ceb-a091-0dd32d1e0555
+# ╟─eecfb266-cd30-4f02-a1e5-61f9427d42d7
 # ╠═7606e704-083e-4a5f-8da5-bcdf3bfa3216
 # ╠═12b33241-044c-4631-a9b9-e9c44e24847a
 # ╠═359b5901-74ec-4b8f-9e7c-7c906f943dec
