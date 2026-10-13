@@ -460,6 +460,13 @@ interesting_plot2 = let
     )
 end
 
+# ╔═╡ d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
+md"""
+## Interesting Plot 2
+
+Green and not-green percentages are compared within five asset-age intervals: 0–<10, 10–<20, 20–<30, 30–<40, and 40+. Unlike Plot 1, which examines variable distributions within condition groups, this figure examines condition proportions within age groups. Each percentage is calculated using the total number of eligible assessments in its age interval, allowing differences in condition status to be distinguished from differences in the number of available records. The two percentages sum to 100% for each interval containing observations, and the sample-size labels provide context for interpreting the comparison. Although the points are connected, they represent separate groups of assessment records rather than deterioration tracked for individual boilers over time. The broad intervals, particularly the open-ended 40+ category, should also be considered when interpreting age-related patterns.
+"""
+
 # ╔═╡ d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
 md"""
 ## Interesting Plot 3
@@ -719,6 +726,7 @@ md"""
 # ╟─bb5b17b7-ad96-4e96-b67c-dc06c1875caf
 # ╠═345182d1-e582-4498-ad3a-daed465891ec
 # ╠═9c2bd780-dca9-4778-8ae3-58003769aefb
+# ╟─d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
 # ╠═d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
 # ╠═4757dd14-b688-49cc-8e73-3878eceff35e
 # ╟─d0b92a37-92ed-4ce4-85cb-beba9eaab65a
