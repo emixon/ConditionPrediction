@@ -626,6 +626,11 @@ md"""
 ### Spearman Correlation Analysis
 """
 
+# ╔═╡ 09771c81-3e9c-42ea-be1a-e389f0bcd906
+md"""
+To quantify the strength of monotonic relationships between variables in the dataset, a pairwise correlation analysis was conducted. Spearman’s rank correlation coefficient (ρ) was calculated for each combination of variable pairs. The results indicate that Score, an Expert assessor’s assigned condition rating of a given boiler, is not explained by a single correlation with another variable. Therefore, a multivariate approach is needed.
+"""
+
 # ╔═╡ 5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 begin
 	# create matrix for correlation
@@ -736,6 +741,7 @@ md"""
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
 # ╠═c971b211-e043-47b3-88b7-ad73b6872796
 # ╟─b9c194d6-87fe-459e-82f6-e551d4889747
+# ╟─09771c81-3e9c-42ea-be1a-e389f0bcd906
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 # ╠═17d5f78e-7188-4496-b00e-36be135fe37f
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
