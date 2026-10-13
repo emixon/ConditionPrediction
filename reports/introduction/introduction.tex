@@ -39,13 +39,13 @@
 
 \section{Introduction}
 
-Sustainment of very large real property portfolios requires many complex decisions. When a few decision makers must allocate constrained maintenance funding across millions of facilities, informed individual repair/replace decisions become infeasible for the whole portfolio. Real property managers in this situation rely on mathematical models to assist with funding distribution and work action decisions across the large scope.  These sustainment decision models generally rely on condition information about the inventory within the portfolio to drive their decision-making. This is known as a knowledge-based decision model.  In many cases, it is infeasible to install condition sensors on every component of every facility, so knowledge-based models will use expert observations in the form of condition assessments to inform inventory condition.  While sustainment models can attempt to predict condition deterioration over time, much like weather prediction models, they are only reliable for short-term horizons. So, periodic re-observations are required through assessment contracts with large A\&E firms to collect and update condition information.  
+Sustainment of very large real property portfolios requires many complex decisions. When a few decision makers must allocate constrained maintenance funding across millions of facilities, informed individual repair/replace decisions become infeasible for the whole portfolio. Real property managers in this situation rely on mathematical models to assist with funding distribution and work action decisions across the large scope.  These sustainment decision models generally rely on condition information about the inventory within the portfolio to drive their decision-making. This is known as a knowledge-based decision model.  In many cases, it is infeasible to install condition sensors on every component of every facility, so knowledge-based models will use expert observations in the form of condition assessments to inform inventory condition.  While sustainment models can attempt to predict condition deterioration over time, much like weather prediction models, they are only reliable for short-term horizons. So, periodic re-observations are required through assessment contracts with large architecture and engineering (A\&E) firms to collect and update condition information.  
 
 Stemming from these requirements comes a need for real property managers to decide what inventory in their portfolio is due for re-observation.  Historically, the most common method is to simply reassess everything every 5 years (i.e. 20\% of the portfolio per year).  To reduce the amount and therefore cost of these assessments, a value of information (VOI) strategy could be utilized to make informed selections of which assets or components within the inventory are of the highest value to re-assess (i.e. the most likely to improve our maintenance investment decisions).  A critical requirement of this model is to be able to predict what scores an assessor would likely assign to a component based on historical data. 
 
 \section{Dataset}
 
-The dataset used for this project comes from assessment data in the Sustainment Management System (SMS) BUILDER platform developed by Construction Engineering Research Laboratory (CERL). The full dataset includes approximately 2.7 million observations. Observations include both a manually collected direct condition rating and a predicted condition index generated from component information using the SMS Weibull degradation model at the time of an assessment. Multiple observations can be generated for given components if they have multiple assessment records. The observation's predicted CI (Condition Index) is generated using the following:
+The dataset used for this project comes from assessment data in the Sustainment Management System (SMS) BUILDER platform developed by Construction Engineering Research Laboratory (CERL). The full dataset includes approximately 2.7 million observations. Observations include both a manually collected direct condition rating and a predicted condition index generated from component information using the SMS Weibull degradation model at the time of an assessment. Multiple observations can be generated for given components if they have multiple assessment records. The observation's predicted condition index (CI) is generated using the following:
 
 \begin{equation}
 \label{eq:sms-weibull-ci}
@@ -71,7 +71,7 @@ Spec & Int & Unique identifier for the specification of the component. This repr
 MEC & Int & Unique identifier for the Material Equipment Category. A less specific reference to the type of object being assessed (i.e. Pump, AST, Gas Boiler, etc.) \\
 System & Int & Unique identifier for a very generic classification of the component (i.e. HVAC Equipment, Exterior Shell, Plumbing, etc.) \\
 DesignLife & Int (Years) & Designed lifespan in years of the component. \\
-Qty & Float (UOM) & Quantity of the component. Units defined by UOM. \\
+Qty & Float (UOM) & Quantity of the component. Units defined by units of measure (UOM). \\
 UOM & String & Unit of Measure of the component Qty. \\
 NormalizedAge & Float & Equal to $\text{ComponentAge} / \text{DesignLife}$. \\
 EffectiveAge & Float & The curve adjusted age of the component at the time of assessment \\
@@ -148,13 +148,13 @@ Complete degradation and loss of serviceability. May result in damage to surroun
 
 \section{Proposed Objectives}
 
-Although the dataset consists of 2.7 million observations, a subset corresponding to a single material equipment category (MEC) will be used for this project. The MEC for boilers consists of 12,832 assessments, so it should be possible to perform a detailed analysis for the specifications within this MEC. The goal of this study will be to identify the best parameters about a component that would inform the best possible predictions about a likely assessment score distribution.  The study could also explore different types of models such as binning solutions, decision trees (XGBoost), ANNs, or other class-based solutions to find which of the options would inform the best predictions.
+Although the dataset consists of 2.7 million observations, a subset corresponding to a single material equipment category (MEC) will be used for this project. The MEC for boilers consists of 12,832 assessments, so it should be possible to perform a detailed analysis for the specifications within this MEC. The goal of this study will be to identify the best parameters about a component that would inform the best possible predictions about a likely assessment score distribution.  The study could also explore different types of models such as binning solutions, decision trees (such as eXtreme Gradient Boosting, known as XGBoost), artificial neural networks (ANNs), or other class-based solutions to find which of the options would inform the best predictions.
 
 The proposed workflow for the project is:
 \begin{enumerate}
 \item Perform initial exploratory analysis to identify data wrangling needs and potential data bias.
 \item Perform Principal Component Analysis (PCA) to identify the best predictive parameters.
-\item Build a prediction model returning multi-class distribution using a Artificial Neural Network (ANN) trained on identified principal components.
+\item Build a prediction model returning multi-class distribution using an Artificial Neural Network (ANN) trained on identified principal components.
 \item Build a prediction model returning multi-class distribution using XGBoost (or other decision tree library) trained on identified principal components.
 \item Build additional prediction models based on in-class statistical learning solutions.
 \item Perform comparative study between prediction models to identify which has the best predictive performance.
