@@ -19,6 +19,13 @@ begin
     using StatsBase
 end
 
+# ╔═╡ ea18b937-bd81-4517-a04a-ca4987d37319
+begin
+	Pkg.add(["HypothesisTests"])
+	
+	using HypothesisTests
+end
+
 # ╔═╡ 8a745a37-637c-49e7-9b80-a00e35e2134d
 
 
@@ -639,6 +646,15 @@ begin
     spearman_matrix = corspearman(boilers_cor)
 end
 
+# ╔═╡ 6dffd504-3993-443b-a5e8-b4ba47b3b107
+begin
+	# statistical significance
+	x = [1, 2, 3, 4, 5]
+	y = [5, 6, 7, 8, 7]
+	test_result = CorrelationTest(x, y_vec, method=:spearman)
+	println(test_result)
+end
+
 # ╔═╡ 17d5f78e-7188-4496-b00e-36be135fe37f
 begin
 	# CREATE SPEARMAN HEATMAP
@@ -743,6 +759,8 @@ md"""
 # ╟─b9c194d6-87fe-459e-82f6-e551d4889747
 # ╟─09771c81-3e9c-42ea-be1a-e389f0bcd906
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
+# ╠═ea18b937-bd81-4517-a04a-ca4987d37319
+# ╠═6dffd504-3993-443b-a5e8-b4ba47b3b107
 # ╠═17d5f78e-7188-4496-b00e-36be135fe37f
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
 # ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
