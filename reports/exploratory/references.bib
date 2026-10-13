@@ -1,0 +1,48 @@
+%
+%
+% August 20, 2011
+%
+% Bibtex bibliographic data base using the canonical set given in the
+%   ASCE web document "Instructions For Preparation Of Electronic Manuscripts"
+% For use with the ascelike.bst bibliographic style file.
+%
+% A few 'fine points' about bibtex data bases:
+%   1) Entries that are NOT enclosed in quotations marks ("" "") 
+%      must contain data.  For example, the NUMBER entry.  If you don't
+%      know the NUMBER, don't leave it blank.  Just remove the entire 
+%      NUMBER line.
+%   2) Bibtex will suppress capital letters within the TITLE of an article
+%      (except for the first word of the title).  To force capitalization, 
+%      enclose the capitalized letter(s) in curly braces, such as {ASCE}
+%      of {SI}.
+%   3) Although unusual, if the reference has no author, you will need to
+%      be somewhat creative to produce ASCE-like output.  This usually occurs
+%      when the "non-author" is an organization instead of a person, but
+%      it also applies to newspaper articles.  Try the following:
+%        a) if the non-author is a a single word or abreviation ("ASTM" or
+%           "Newsweek"), try formatting as a book, incollection, or article,
+%           placing the non-author in the AUTHOR field.
+%        b) if the non-author is multiple word (Federal Highway 
+%           Administration), you will need to be creative, since bibtex
+%           will confuse the non-author as a person with first, middle, and
+%           last names (for example, Federal, H. A.).  Try using the MANUAL
+%           format as shown in FHWA:1991a, FR:1968a, and ICBO:1988a
+%
+%
+@misc{ontario_bridge_conditions_2021,
+  author       = {{Government of Ontario}},
+  title        = {Bridge Conditions},
+  year         = {2021},
+  month        = jun,
+  publisher    = {Ontario Data Catalogue},
+  url          = {https://data.ontario.ca/en/dataset/bridge-conditions},
+  note         = {Dataset; last updated June 9, 2021. Accessed October 9, 2026}
+}
+
+@misc{doe_building_america_climate_guidance,
+  author       = {{U.S. Department of Energy}},
+  title        = {Building America Climate-Specific Guidance},
+  publisher    = {U.S. Department of Energy},
+  url          = {https://www.energy.gov/cmei/buildings/building-america-climate-specific-guidance},
+  note         = {Webpage and climate-zone guidance/map resource. Accessed October 9, 2026}
+}

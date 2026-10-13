@@ -139,11 +139,6 @@ end
 md"""
 ## Principal Component Analysis
 In our goal to predict assessment scores for a given component, it is useful to perform a principal component analysis to identify which properties of the observation provide the majority of the variance. This allows us to de-noise our prediction models by omitting properties that have very little contribution to the information.
-
-To simplify the model somewhat in a reasonable way for identifying score predictors. We can simplify the classification of scores from the 9 possible ratings to simply Red, Amber, and Green Scores, which is to say bucket scores that are >= 88 as Green, scores >= 60 < 88 as Amber and scores < 60 as Red.  This helps lend itself to identifying the distinction between components being well maintained in a functional state (Green) and components being neglected.  The key question becomes, "Can we identify patterns and key factors that differentiate between well maintained and poorly maintained components".
-
-To do this, we will first omit the Score property from the PCA analysis to avoid data leakage and then reintroduce it after to color code the follow up by Red,Amber,Green scores that have been backloaded into the resulting PC space.
-
 """
 
 # ╔═╡ b23788a2-2890-4417-bb00-9ebd4565b449
@@ -171,8 +166,7 @@ begin
         :LogCRV,
         :Year,
         :Month,
-        :Climate,
-        :Fac
+        :Climate
     ]
 
     X = Matrix(select(boilers, pca_vars))' # Select columns, convert to matrix, and transform
@@ -228,7 +222,6 @@ begin
         PC12 = F.U[:, 12],
         PC13 = F.U[:, 13],
         PC14 = F.U[:, 14],
-        PC15 = F.U[:, 15],
     )
 
     sort!(loadings, :PC1, by=abs, rev=true)
@@ -294,7 +287,6 @@ function GetPCAPlot(modes, explained_ratio)
         ylabel = "Explained Variance (%)",
         title = "Boiler PCA Plot",
         legend = false,
-        size=(1000, 800)
     )
 end
 
@@ -329,7 +321,6 @@ function GetLoadingsHeatMap(F, pca_variables; squared=false)
         clims = (squared ? (0, limit) : (-limit, limit)),
         c = (squared ? :viridis : :RdBu),
         yflip = true,
-        size=(1000, 800)
     )
 end
 
@@ -347,12 +338,11 @@ let
         :LogCRV,
         :Month,
         :Year,
-        :Climate,
-        :Fac
+        :Climate
     ]
     F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, boilers)
 
-    plot(GetPCAPlot(12, explained_ratio), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true), size=(2000, 800))
+    results, GetPCAPlot(8, explained_ratio), GetLoadings(F, pca_vars_single_lf), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true)
 end
 
 # ╔═╡ 7606e704-083e-4a5f-8da5-bcdf3bfa3216
@@ -382,43 +372,12 @@ begin
     group_summary
 end
 
-# ╔═╡ 359b5901-74ec-4b8f-9e7c-7c906f943dec
-function compare_histogram(variable, heading)
-    green = collect(skipmissing(green_boilers[!, variable]))
-    notgreen = collect(skipmissing(notgreen_boilers[!, variable]))
+# ╔═╡ 0263eb8b-4e72-4ebc-988b-e524302c2d6a
+md"""
+## Two Comparison Groups
 
-    if isempty(green) || isempty(notgreen)
-        error("Both groups need recorded values for $variable.")
-    end
-
-    # Use the same intervals for both groups.
-    values = vcat(green, notgreen)
-    low, high = extrema(values)
-
-    if low == high
-        low -= 0.5
-        high += 0.5
-    end
-
-    edges = range(low, nextfloat(Float64(high)); length=31)
-
-    p = histogram(
-        green;
-        bins=edges, normalize=:probability, alpha=0.5,
-        label="Green (n=$(length(green)))",
-        title=heading, xlabel=heading,
-        ylabel="Proportion within group",
-        legend=:topright,
-    )
-
-    histogram!(
-        p, notgreen;
-        bins=edges, normalize=:probability, alpha=0.5,
-        label="Not green (n=$(length(notgreen)))",
-    )
-
-    return p
-end
+Assessment records are divided into green (`Score ≥ 88`) and not-green (`Score < 88`) groups based on the current assessment score. Records without a current score are excluded because their condition status cannot be assigned. The summary table reports the number and percentage of observations in each group, establishing the distribution of condition status before examining lifecycle characteristics, assessment history, asset age, and climate. Since unequal group sizes can make comparisons based on raw counts misleading, the subsequent figures use proportions to compare distributions and condition percentages. Sample-size labels indicate the number of observations supporting each comparison. These counts represent assessment records rather than necessarily distinct boilers.
+"""
 
 # ╔═╡ 5d26ccac-1d20-44f7-8696-440e91eeabf1
 md"""
@@ -427,100 +386,169 @@ md"""
 
 # ╔═╡ e7fae12f-3e0b-4e9f-a874-4cb0db599494
 interesting_plot1 = let
-    p1 = compare_histogram(:NormalizedAge, "Normalized Age")
-    p2 = compare_histogram(:RSL, "Remaining Service Life")
-    p3 = compare_histogram(:AssetAge, "Asset Age")
-    p4 = compare_histogram(:PrevScore, "Previous Assessment Score")
+    function compare_histogram(variable, heading)
+        green = filter(isfinite, collect(skipmissing(green_boilers[!, variable])))
+        notgreen = filter(isfinite, collect(skipmissing(notgreen_boilers[!, variable])))
+
+        if isempty(green) || isempty(notgreen)
+            error("Both groups need recorded values for $variable.")
+        end
+
+        # Use matching bin boundaries.
+        low, high = extrema(vcat(green, notgreen))
+        if low == high
+            low -= 0.5
+            high += 0.5
+        end
+        edges = range(low, nextfloat(Float64(high)); length=31)
+
+        histogram([green, notgreen];
+            bins=edges, normalize=:probability, alpha=0.5,
+            label=["Green (n=$(length(green)))" "Not green (n=$(length(notgreen)))"],
+            title=heading, xlabel=heading, ylabel="Proportion within group",
+        )
+    end
 
     plot(
-        p1, p2, p3, p4;
-        layout=(2, 2),
-        size=(1000, 1000),
-        titlefontsize=10,
-        guidefontsize=10,
-        legendfontsize=10,
+        compare_histogram(:RSL, "Remaining Service Life"),
+        compare_histogram(:PrevScore, "Previous Assessment Score");
+        layout=(1, 2), size=(1200, 600),
+        legend=:outertop, legend_column=2, legendfontsize=9,
+        titlefontsize=13, guidefontsize=11, tickfontsize=10,
+        margin=6Plots.mm, left_margin=10Plots.mm, bottom_margin=12Plots.mm,
     )
 end
+
+# ╔═╡ bb5b17b7-ad96-4e96-b67c-dc06c1875caf
+md"""
+## Interesting Plot 1
+
+Remaining service life (`RSL`) and previous assessment score (`PrevScore`) are compared between the green and not-green groups to examine differences in lifecycle characteristics and assessment history. RSL provides a lifecycle measure, while the previous score allows earlier condition to be examined alongside the current classification. Identical bin boundaries and proportions calculated separately within each group support comparison despite unequal sample sizes. A bar height of 0.20 therefore represents 20% of the available observations in that condition group, not 20% of the complete dataset. Differences in concentration, spread, and overlap indicate how the recorded properties distinguish the groups without establishing predictive performance. Missing and nonfinite values are excluded separately for each variable, so the previous-score panel includes only records with a usable previous assessment.
+"""
 
 # ╔═╡ 345182d1-e582-4498-ad3a-daed465891ec
 md"""
 ## Interesting Plot 2
 """
 
-# ╔═╡ 33f8fa4d-737b-4f2e-9a8c-da0715e7b332
-function notgreen_plot(data, column, heading; top=0)
-    d = dropmissing(data, [:Score, column])
-    d.NotGreen = d.Score .< 88
-
-    summary = combine(
-        groupby(d, column; sort=true),
-        nrow => :N,
-        :NotGreen => sum => :NotGreen,
-    )
-
-    summary.Percent = 100 .* summary.NotGreen ./ summary.N
-
-    # Used only when selecting the most-observed facility codes.
-    if top > 0
-        summary = summary[summary.N .>= 50, :]
-        sort!(summary, :N; rev=true)
-        summary = first(summary, top)
-    end
-
-    if nrow(summary) == 0
-        error("No categories available for $column.")
-    end
-
-    labels = [
-        "$(summary[i, column])\n(n=$(summary.N[i]))"
-        for i in 1:nrow(summary)
-    ]
-
-    p = bar(
-        1:nrow(summary), summary.Percent;
-        xticks=(1:nrow(summary), labels),
-        title=heading, ylabel="Not green (%)",
-        ylims=(0, 100), label="",
-        legend=:topright,
-    )
-
-    overall = 100 * mean(d.NotGreen)
-
-    hline!(
-        p, [overall];
-        linestyle=:dash,
-        label="Overall = $(round(overall; digits=1))%",
-    )
-
-    return p
-end
-
-# ╔═╡ 9b583d56-dab5-4f2a-b5a7-8199b0eea251
+# ╔═╡ 9c2bd780-dca9-4778-8ae3-58003769aefb
 interesting_plot2 = let
-    d = copy(comparison_data)
+    d = dropmissing(comparison_data, :AssetAge)
+    d = d[isfinite.(d.Score) .& isfinite.(d.AssetAge), :]
 
-    d.ClimateGroup = string.(coalesce.(d.Climate, "Missing"))
+    edges = [0, 10, 20, 30, 40, Inf]
+    ages = ["0–<10", "10–<20", "20–<30", "30–<40", "40+"]
+    green = Float64[]
+    labels = String[]
 
-    p1 = notgreen_plot(d, :Month, "Assessment Month: 1 = Jan, 12 = Dec")
-    p2 = notgreen_plot(d, :Year, "Assessment Year")
-    p3 = notgreen_plot(d, :ClimateGroup, "Climate Code")
+    for i in eachindex(ages)
+        scores = d.Score[(d.AssetAge .>= edges[i]) .& (d.AssetAge .< edges[i + 1])]
+        push!(green, isempty(scores) ? NaN : 100 * mean(scores .>= 88))
+        push!(labels, "$(ages[i])\n(n=$(length(scores)))")
+    end
+    notgreen = 100 .- green
 
-    plot!(p2; xrotation=45)
-
-    plot(
-        p1, p2, p3;
-        layout=(3, 1),
-        size=(1000, 1000),
-        titlefontsize=10,
-        tickfontsize=10,
-        legendfontsize=10,
+    plot(1:length(ages), [green notgreen];
+        label=["Green" "Not green"], legend=:outertop, legend_column=2,
+        markershape=[:circle :diamond], linestyle=[:solid :dash], linewidth=3,
+        xticks=(1:length(ages), labels), xlims=(0.5, length(ages) + 0.5),
+        ylims=(-3, 103), yticks=0:20:100,
+        title="Green vs Not Green Across Asset-Age Groups",
+        xlabel="Asset-Age Group", ylabel="Assessments within age group (%)",
+        size=(1000, 600), titlefontsize=13, guidefontsize=12, tickfontsize=11,
+        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=14Plots.mm,
     )
 end
 
-# ╔═╡ 409978e5-8f83-49f9-b46b-2f39fac7570f
+# ╔═╡ d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
+md"""
+## Interesting Plot 2
+
+Green and not-green percentages are compared within five asset-age intervals: 0–<10, 10–<20, 20–<30, 30–<40, and 40+. Unlike Plot 1, which examines variable distributions within condition groups, this figure examines condition proportions within age groups. Each percentage is calculated using the total number of eligible assessments in its age interval, allowing differences in condition status to be distinguished from differences in the number of available records. The two percentages sum to 100% for each interval containing observations, and the sample-size labels provide context for interpreting the comparison. Although the points are connected, they represent separate groups of assessment records rather than deterioration tracked for individual boilers over time. The broad intervals, particularly the open-ended 40+ category, should also be considered when interpreting age-related patterns.
+"""
+
+# ╔═╡ d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
 md"""
 ## Interesting Plot 3
 """
+
+# ╔═╡ 4757dd14-b688-49cc-8e73-3878eceff35e
+begin
+    climate_codes = sort(unique(string.(coalesce.(comparison_data.Climate, "Unknown"))))
+
+    function climate_plot(data, heading)
+        d = data[isfinite.(data.Score), :]
+        climate = string.(coalesce.(d.Climate, "Unknown"))
+        green = Float64[]
+        labels = String[]
+
+        for code in climate_codes
+            scores = d.Score[climate .== code]
+            push!(green, isempty(scores) ? NaN : 100 * mean(scores .>= 88))
+            push!(labels, "$code\n(n=$(length(scores)))")
+        end
+        notgreen = 100 .- green
+
+        p = groupedbar(1:length(climate_codes), [green notgreen];
+            bar_position=:stack, bar_width=0.65, fillalpha=0.6, linewidth=0,
+            label=["Green" "Not green"], legend=:outertop, legend_column=2,
+            xticks=(1:length(climate_codes), labels),
+            xlims=(0.5, length(climate_codes) + 0.5),
+            title=heading, xlabel="Climate Code", ylabel="Assessments (%)",
+            size=(max(1100, 140 * length(climate_codes)), 650), grid=false,
+            titlefontsize=13, guidefontsize=12, tickfontsize=11,
+            margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
+        )
+        plot!(p; ylims=(0, 110), yticks=0:20:100, ywiden=false)
+
+        # Place small-percentage labels above the bar.
+        function add_percentage(i, value, y, group)
+            label = "$(round(value; digits=1))%"
+            if value < 8
+                y = 105
+                label = "$group: $label"
+            end
+            annotate!(p, i, y, text(label, 10))
+        end
+
+        for i in eachindex(green)
+            if isnan(green[i])
+                annotate!(p, i, 50, text("No data", 10))
+            else
+                add_percentage(i, notgreen[i], notgreen[i] / 2, "Not green")
+                add_percentage(i, green[i], notgreen[i] + green[i] / 2, "Green")
+            end
+        end
+        p
+    end
+
+    interesting_plot3 = climate_plot(comparison_data, "Green vs Not Green by Climate")
+end
+
+# ╔═╡ d0b92a37-92ed-4ce4-85cb-beba9eaab65a
+md"""
+## Interesting Plot 4
+"""
+
+# ╔═╡ 8eeb40e8-93cd-410b-b6d7-30fa362dca6e
+interesting_plot4 = let
+    d = dropmissing(comparison_data, :AssetAge)
+    d = d[isfinite.(d.AssetAge), :]
+
+    function age_plot(low, high, heading)
+        rows = (d.AssetAge .>= low) .& (d.AssetAge .< high)
+        climate_plot(d[rows, :], "Asset Age: $heading")
+    end
+
+    plot(
+        age_plot(0, 10, "0–<10"), age_plot(10, 20, "10–<20"),
+        age_plot(20, 30, "20–<30"), age_plot(30, 40, "30–<40"),
+        age_plot(40, Inf, "40+");
+        layout=(5, 1), size=(max(1100, 140 * length(climate_codes)), 2700),
+        ylims=(0, 110), yticks=0:20:100, ywiden=false,
+        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
+    )
+end
 
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 md"""
@@ -685,30 +713,34 @@ md"""
 # ╟─a4346d81-ccfe-4376-9cc6-27973e80c095
 # ╠═e417d3b5-d72d-43d5-8662-ad3eefce447d
 # ╟─4daad98c-f8a2-4430-946e-8efd6189a008
-# ╠═ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
-# ╠═0bf742cc-4661-4a33-bee0-4905860d2562
-# ╠═e39f1b09-9bce-40d5-b5d9-03946bffe6fe
+# ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# ╟─0bf742cc-4661-4a33-bee0-4905860d2562
+# ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
 # ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
-# ╠═7606e704-083e-4a5f-8da5-bcdf3bfa3216
+# ╟─7606e704-083e-4a5f-8da5-bcdf3bfa3216
 # ╠═12b33241-044c-4631-a9b9-e9c44e24847a
-# ╠═359b5901-74ec-4b8f-9e7c-7c906f943dec
-# ╠═5d26ccac-1d20-44f7-8696-440e91eeabf1
+# ╟─0263eb8b-4e72-4ebc-988b-e524302c2d6a
+# ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
 # ╠═e7fae12f-3e0b-4e9f-a874-4cb0db599494
+# ╟─bb5b17b7-ad96-4e96-b67c-dc06c1875caf
 # ╠═345182d1-e582-4498-ad3a-daed465891ec
-# ╠═33f8fa4d-737b-4f2e-9a8c-da0715e7b332
-# ╠═9b583d56-dab5-4f2a-b5a7-8199b0eea251
-# ╠═409978e5-8f83-49f9-b46b-2f39fac7570f
-# ╠═2a9579fc-6ec0-4741-859a-6c9105dc8f7d
-# ╠═90916ca7-d937-4a85-b40d-a69c23e38562
+# ╠═9c2bd780-dca9-4778-8ae3-58003769aefb
+# ╟─d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
+# ╠═d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
+# ╠═4757dd14-b688-49cc-8e73-3878eceff35e
+# ╟─d0b92a37-92ed-4ce4-85cb-beba9eaab65a
+# ╠═8eeb40e8-93cd-410b-b6d7-30fa362dca6e
+# ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
+# ╟─90916ca7-d937-4a85-b40d-a69c23e38562
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
 # ╠═c971b211-e043-47b3-88b7-ad73b6872796
-# ╠═b9c194d6-87fe-459e-82f6-e551d4889747
+# ╟─b9c194d6-87fe-459e-82f6-e551d4889747
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 # ╠═17d5f78e-7188-4496-b00e-36be135fe37f
-# ╠═cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
-# ╠═e553e6b3-7b8e-4029-b823-eb98362c49a4
+# ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
+# ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
 # ╠═c4f0042e-dac8-4caf-b983-8bc9678b4d1b
-# ╠═c2324815-aa18-43a0-b9f3-cd7dbcde5647
+# ╟─c2324815-aa18-43a0-b9f3-cd7dbcde5647
 # ╠═8bc9c3b1-0ffb-451b-bae9-bf3d209355b6
-# ╠═2defcea8-94d2-4182-b313-7b242d185c08
+# ╟─2defcea8-94d2-4182-b313-7b242d185c08
