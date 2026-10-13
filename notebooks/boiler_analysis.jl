@@ -14,13 +14,11 @@ begin
     using ConditionPrediction
     using DataFrames
     using StatsPlots
+    using StatsPlots.PlotMeasures: mm
     using Statistics
     using LinearAlgebra
     using StatsBase
 end
-
-# ╔═╡ 8a745a37-637c-49e7-9b80-a00e35e2134d
-
 
 # ╔═╡ f92de274-9c7f-4ea2-84a5-d18f97044498
 md"""
@@ -62,6 +60,169 @@ begin
     getHistAll(boilers)
 end
 
+# ╔═╡ 2b0101e9-083d-4f57-a212-118246c394c0
+md"""
+### Individual Histograms for Report
+"""
+
+# ╔═╡ 53453c93-2414-4265-9530-5b8cdb2f6a51
+month_hist = histogram(
+    boilers.Month;
+    bins = 0.5:1:12.5,
+    xticks = (
+        1:12,
+        ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    ),
+    xlims = (0.5, 12.5),
+    xlabel = "Assessment Month",
+    ylabel = "Number of Boiler Assessments",
+    title = "Boiler Assessments by Month",
+    legend = false,
+    size = (1600, 1000),
+    dpi = 200,
+    titlefontsize = 40,
+    guidefontsize = 30,
+    tickfontsize = 24,
+
+    left_margin = 18mm,
+    bottom_margin = 14mm,
+    top_margin = 10mm,
+    right_margin = 8mm,
+)
+
+# ╔═╡ f23ccc17-2d70-4e7b-b773-b690809f1c7b
+ci_hist = histogram(
+    boilers.PredictedCI;
+    bins = 100,
+    xlims = (0, 100),
+    xlabel = "Weibull Predicted Condition Index",
+    ylabel = "Number of Boiler Assessments",
+    title = "Predicted Boiler Condition Index",
+    legend = false,
+
+    size = (1600, 1000),
+    dpi = 200,
+    titlefontsize = 40,
+    guidefontsize = 30,
+    tickfontsize = 24,
+
+    left_margin = 18mm,
+    bottom_margin = 14mm,
+    top_margin = 10mm,
+    right_margin = 8mm,
+)
+
+# ╔═╡ b63769cc-aaa0-4bae-8305-f4946e7d6200
+rsl_hist = histogram(
+    boilers.RSL;
+    bins = 100,
+    xlims = (-50, 35),
+    xlabel = "Remaining Service Life (Years)",
+    ylabel = "Number of Boiler Assessments",
+    title = "Boiler Remaining Service Life",
+    legend = false,
+
+    size = (1600, 1000),
+    dpi = 200,
+    titlefontsize = 40,
+    guidefontsize = 30,
+    tickfontsize = 24,
+
+    left_margin = 18mm,
+    bottom_margin = 14mm,
+    top_margin = 10mm,
+    right_margin = 8mm,
+)
+
+# ╔═╡ e1772dde-cfe8-4dbe-85a3-5a8881b44f3f
+score_hist = histogram(
+    boilers.Score;
+    bins = 100,
+    xlims = (0, 100),
+    xticks = 0:10:100,
+    xlabel = "Assessed Condition Score",
+    ylabel = "Number of Boiler Assessments",
+    title = "Assessed Boiler Condition Scores",
+    legend = false,
+
+    size = (1600, 1000),
+    dpi = 200,
+    titlefontsize = 40,
+    guidefontsize = 30,
+    tickfontsize = 24,
+
+    left_margin = 18mm,
+    bottom_margin = 14mm,
+    top_margin = 10mm,
+    right_margin = 8mm,
+)
+
+# ╔═╡ c2e70042-a52b-4746-bc96-5c2fa45081fb
+begin
+    climate_for_plot = coalesce.(boilers.Climate, 0)
+
+    climate_ticks = 0:8
+    
+    climate_tick_labels = [
+        "Missing",
+        "1\nHot",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8\nCold",
+    ]
+    
+    climate_hist = histogram(
+        climate_for_plot;
+        bins = -0.5:1:8.5,
+        xlims = (-0.5, 8.5),
+        xticks = (climate_ticks, climate_tick_labels),
+        xlabel = "Climate Zone",
+        ylabel = "Number of Boiler Assessments",
+        title = "Boiler Assessments by Climate Zone",
+        legend = false,
+    
+        size = (1600, 1000),
+        dpi = 200,
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+    
+        left_margin = 18mm,
+        bottom_margin = 20mm,
+        top_margin = 10mm,
+        right_margin = 10mm,
+    )
+end
+
+# ╔═╡ 90195285-709a-4116-9f86-45235d44d1d3
+hists = plot(
+    month_hist,
+    ci_hist,
+    rsl_hist,
+    score_hist,
+    climate_hist;
+    layout = (3, 2),
+    size = (3200, 3000),
+    dpi = 200,
+)
+
+# ╔═╡ f24d976a-8877-4873-9110-b3f32c1f3078
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	savefig(month_hist, "month_dist.png")
+	savefig(ci_hist, "ci_dist.png")
+	savefig(rsl_hist, "rsl_dist.png")
+	savefig(score_hist, "score_dist.png")
+	savefig(climate_hist, "climate_dist.png")
+end
+  ╠═╡ =#
+
 # ╔═╡ 5ca1e039-ee02-4467-95e0-8f44cb4995db
 md"""
 ### Describe The Boilers Data Frame
@@ -102,19 +263,27 @@ For the missing Climate data, we will simply replace "missing" values with the m
 
 # ╔═╡ b078a14b-049e-4398-9c79-85ef7fde2843
 begin
-	boilers_raw_data = boilers
-	boilers.PrevAssessed = Int.(.!ismissing.(boilers.PrevScore))
+	boilers_raw_data = copy(boilers)
+	wrangled_boilers = copy(boilers)
+	wrangled_boilers.PrevAssessed = Int.(.!ismissing.(wrangled_boilers.PrevScore))
 	
-	mean_PrevScore = mean(skipmissing(boilers.PrevScore))
-	mean_Recency = mean(skipmissing(boilers.Recency))
-	mean_Climate = mean(skipmissing(boilers.Climate))
+	mean_PrevScore = mean(skipmissing(wrangled_boilers.PrevScore))
+	mean_Recency = mean(skipmissing(wrangled_boilers.Recency))
+	mean_Climate = mean(skipmissing(wrangled_boilers.Climate))
 	
-	boilers.PrevScore = coalesce.(boilers.PrevScore, mean_PrevScore)
-	boilers.Recency = coalesce.(boilers.Recency, mean_Recency)
-	boilers.Climate = coalesce.(boilers.Climate, mean_Climate)
+	wrangled_boilers.PrevScore = coalesce.(wrangled_boilers.PrevScore, mean_PrevScore)
+	wrangled_boilers.Recency = coalesce.(wrangled_boilers.Recency, mean_Recency)
+	wrangled_boilers.Climate = coalesce.(wrangled_boilers.Climate, mean_Climate)
+	wrangled_boilers.NormalizedAssetAge = wrangled_boilers.AssetAge ./ wrangled_boilers.AssetDesignLife
+
+	month_angle = 2π .* (wrangled_boilers.Month .- 1) ./ 12
+
+	# Addressses cyclical nature of months (keeping december near january)
+    wrangled_boilers.MonthSin = sin.(month_angle)
+    wrangled_boilers.MonthCos = cos.(month_angle)
 
 	# New Boilers df
-	boilers
+	wrangled_boilers
 end
 
 # ╔═╡ 78c6cc72-5658-495d-9444-cfa4b4bc582a
@@ -125,20 +294,97 @@ The CRV column values notably cover a range several orders of magnitude more tha
 
 # ╔═╡ 64dbadfb-21b1-4ecd-b157-efd6f3a96983
 begin
-	crv = boilers[!, :CRV]
+	crv = wrangled_boilers[!, :CRV]
 	scrv = sort(crv, rev=true)
-	boilers.LogCRV = log1p.(boilers.CRV)
-	log_crv = boilers[!, :LogCRV]
+	wrangled_boilers.LogCRV = log1p.(wrangled_boilers.CRV)
+	log_crv = wrangled_boilers[!, :LogCRV]
 	log_scrv = sort(log_crv, rev=true)
 	crv_plot = plot(scrv, xlabel="Index", ylabel="Cost", title="CRV", st=:scatter)
 	log_crv_plot = plot(log_scrv, xlabel="Index", ylabel="Cost", title="Log CRV", st=:scatter)
 	plot(crv_plot, log_crv_plot, layout=(1,2), size=(1200, 800))
 end
 
+# ╔═╡ e74edc09-4c17-42f5-898d-34f7a26c3474
+let
+	crv = wrangled_boilers[!, :CRV]
+    sorted_crv = sort(crv; rev = true)
+
+    wrangled_boilers.LogCRV = log1p.(wrangled_boilers.CRV)
+    sorted_log_crv = sort(wrangled_boilers.LogCRV; rev = true)
+
+    rank = 1:length(sorted_crv)
+    crv_plot = scatter(
+        rank,
+        sorted_crv;
+        xlabel = "Boiler Rank by CRV (Highest to Lowest)",
+        ylabel = "Component Replacement Value (USD)",
+        title = "Sorted Component Replacement Value",
+        xlims = (1, length(rank)),
+        xticks = xticks = (
+            [first(rank), last(rank)],
+            [string(first(rank)), string(last(rank))],
+        ),
+        markersize = 3,
+        markerstrokewidth = 0,
+        alpha = 0.7,
+        legend = false,
+
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+
+        left_margin = 22mm,
+        bottom_margin = 14mm,
+        top_margin = 10mm,
+        right_margin = 10mm,
+    )
+
+    log_crv_plot = scatter(
+        rank,
+        sorted_log_crv;
+        xlabel = "Boiler Rank by CRV (Highest to Lowest)",
+        ylabel = raw"$\log(\mathrm{CRV} + 1)$",
+        title = "Sorted Log-Transformed Replacement Value",
+        xlims = (1, length(rank)),
+        xticks = xticks = (
+            [first(rank), last(rank)],
+            [string(first(rank)), string(last(rank))],
+        ),
+        markersize = 3,
+        markerstrokewidth = 0,
+        alpha = 0.7,
+        legend = false,
+
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+
+        left_margin = 22mm,
+        bottom_margin = 14mm,
+        top_margin = 10mm,
+        right_margin = 10mm,
+    )
+
+    pretty_log = plot(
+        crv_plot,
+        log_crv_plot;
+        layout = (1, 2),
+        size = (3000, 1500),
+        dpi = 200,
+    )
+
+    #savefig(pretty_log, "log_crv_scatter.png")
+end
+
 # ╔═╡ b62c7f0d-f9e8-41b6-9eb6-e77f55345806
 md"""
 ## Principal Component Analysis
 In our goal to predict assessment scores for a given component, it is useful to perform a principal component analysis to identify which properties of the observation provide the majority of the variance. This allows us to de-noise our prediction models by omitting properties that have very little contribution to the information.
+
+To simplify the model somewhat in a reasonable way for identifying score predictors. We can simplify the classification of scores from the 9 possible ratings to simply Red, Amber, and Green Scores, which is to say bucket scores that are >= 88 as Green, scores >= 60 < 88 as Amber and scores < 60 as Red.  This helps lend itself to identifying the distinction between components being well maintained in a functional state (Green) and components being neglected.  The key question becomes, "Can we identify patterns and key factors that differentiate between well maintained and poorly maintained components".
+
+To do this, we will first omit the Score property from the PCA analysis to avoid data leakage and then reintroduce it after to color code the follow up by Red,Amber,Green scores that have been backloaded into the resulting PC space.
+
 """
 
 # ╔═╡ b23788a2-2890-4417-bb00-9ebd4565b449
@@ -160,16 +406,17 @@ begin
         :PrevScore,
         :PrevAssessed,
         :PredictedCI,
-        :Qty,
-        :AssetAge,
-        :AssetDesignLife,
+        #:Qty,
+        :NormalizedAssetAge,
         :LogCRV,
         :Year,
-        :Month,
-        :Climate
+        :MonthSin,
+        :MonthCos,
+        :Climate,
+        #:Fac
     ]
 
-    X = Matrix(select(boilers, pca_vars))' # Select columns, convert to matrix, and transform
+    X = Matrix(select(wrangled_boilers, pca_vars))' # Select columns, convert to matrix, and transform
     
     X̄ = mean(X, dims=2) # Get the Mean
     σ = std(X, dims=2) # Get the Standard Deviation
@@ -193,7 +440,7 @@ end
 # ╔═╡ a4346d81-ccfe-4376-9cc6-27973e80c095
 begin
     modes = 11
-    plot(
+    pc_plot = plot(
         1:modes,
         explained_ratio[1:modes] .* 100;
         marker = :circle,
@@ -201,7 +448,18 @@ begin
         ylabel = "Explained Variance (%)",
         title = "Boiler PCA Plot",
         legend = false,
+        size = (1600, 1000),
+        dpi = 200,
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+    
+        left_margin = 18mm,
+        bottom_margin = 20mm,
+        top_margin = 10mm,
+        right_margin = 10mm,
     )
+    #savefig(pc_plot, "pca_plot_initial.png")
 end
 
 # ╔═╡ e417d3b5-d72d-43d5-8662-ad3eefce447d
@@ -221,7 +479,6 @@ begin
         PC11 = F.U[:, 11],
         PC12 = F.U[:, 12],
         PC13 = F.U[:, 13],
-        PC14 = F.U[:, 14],
     )
 
     sort!(loadings, :PC1, by=abs, rev=true)
@@ -266,6 +523,7 @@ function CalcSVDAndExplainedVariance(pca_variables, df)
     explained_variance = F.S .^ 2 ./ (size(Z, 2) - 1)
     explained_ratio = explained_variance ./ sum(explained_variance)
     cumulative_ratio = cumsum(explained_ratio)
+    scores = F.Vt' * Diagonal(F.S)
 
     results = DataFrame(
         PC = 1:length(F.S),
@@ -273,7 +531,7 @@ function CalcSVDAndExplainedVariance(pca_variables, df)
         ExplainedRatio = explained_ratio,
         CumulativeRatio = cumulative_ratio,
     )
-    return F, results, explained_variance, explained_ratio
+    return F, results, explained_variance, explained_ratio, scores
 end
 
 # ╔═╡ 0bf742cc-4661-4a33-bee0-4905860d2562
@@ -287,6 +545,16 @@ function GetPCAPlot(modes, explained_ratio)
         ylabel = "Explained Variance (%)",
         title = "Boiler PCA Plot",
         legend = false,
+        size = (1600, 1000),
+        dpi = 200,
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+    
+        left_margin = 18mm,
+        bottom_margin = 20mm,
+        top_margin = 10mm,
+        right_margin = 10mm,
     )
 end
 
@@ -321,8 +589,156 @@ function GetLoadingsHeatMap(F, pca_variables; squared=false)
         clims = (squared ? (0, limit) : (-limit, limit)),
         c = (squared ? :viridis : :RdBu),
         yflip = true,
+        size = (1600, 1000),
+        dpi = 200,
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+    
+        left_margin = 18mm,
+        bottom_margin = 20mm,
+        top_margin = 10mm,
+        right_margin = 10mm,
     )
 end
+
+# ╔═╡ 86170372-b428-4e4c-b817-2e2a3be9f8c8
+function GetScoreClassProjection(
+    scores,
+    score,
+    pc_x,
+    pc_y;
+    threshold = 85,
+)
+    green = score .> threshold
+    amber_red = .!green
+
+    p = scatter(
+        scores[amber_red, pc_y],
+        scores[amber_red, pc_x];
+        color = :orange,
+        alpha = 0.3,
+        markersize = 2,
+        markerstrokewidth = 0,
+        label = "Score ≤ $threshold",
+        title = "Score Groups: PC$pc_x vs. PC$pc_y",
+    )
+
+    scatter!(
+        p,
+        scores[green, pc_y],
+        scores[green, pc_x];
+        color = :green,
+        alpha = 0.3,
+        markersize = 2,
+        markerstrokewidth = 0,
+        label = "Score > $threshold",
+    )
+
+    return p
+end
+
+# ╔═╡ e346bbf0-066e-4de6-bcdd-6c2732756d17
+function GetPCScoreHistogram(
+    scores,
+    score,
+    pc;
+    threshold = 85,
+    nbins = 100,
+)
+    x = scores[:, pc]
+
+    green = score .> threshold
+    amber_red = .!green
+
+    # Use identical bin edges for both groups.
+    bins = range(minimum(x), maximum(x), length = nbins + 1)
+
+    p = histogram(
+        x[amber_red];
+        bins = bins,
+        normalize = :pdf,
+        color = :orange,
+        alpha = 0.55,
+        title = "PC$pc Score Distribution",
+        label = "Score ≤ $threshold",
+        size = (800, 500),
+        dpi = 200,
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+        legendfontsize = 24,
+    
+        left_margin = 18mm,
+        bottom_margin = 20mm,
+        top_margin = 10mm,
+        right_margin = 10mm,
+    )
+
+    histogram!(
+        p,
+        x[green];
+        bins = bins,
+        normalize = :pdf,
+        color = :green,
+        alpha = 0.45,
+        label = "Score > $threshold",
+        size = (800, 500),
+        dpi = 200,
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+        legendfontsize = 24,
+    
+        left_margin = 18mm,
+        bottom_margin = 20mm,
+        top_margin = 10mm,
+        right_margin = 10mm,
+    )
+
+    return p
+end
+
+# ╔═╡ 5a3a0107-bed6-440a-9805-5a2b9b483b72
+function GetScoreFacScatter(scores)
+    facility_data = DataFrame(
+        Fac = wrangled_boilers.Fac,
+        Score = wrangled_boilers.Score,
+        PC1 = scores[:, 1],
+        PC2 = scores[:, 2],
+    )
+
+    facility_data.NotGreen = facility_data.Score .< 88
+
+    facility_summary = combine(
+        groupby(facility_data, :Fac),
+        nrow => :N,
+        :PC1 => mean => :MeanPC1,
+        :PC2 => mean => :MeanPC2,
+        :NotGreen => mean => :NotGreenRate,
+    )
+
+    facility_summary.PercentNotGreen = 100 .* facility_summary.NotGreenRate
+
+    # Exclude very small facilities from the first exploratory view.
+    plot_data = subset(facility_summary, :N => ByRow(>=(20)))
+
+    scatter(
+        plot_data.MeanPC1,
+        plot_data.MeanPC2;
+        marker_z = plot_data.PercentNotGreen,
+        markersize = 3 .+ 2 .* log10.(plot_data.N),
+        markerstrokewidth = 0,
+        alpha = 0.8,
+        c = :viridis,
+        colorbar_title = "Not green (%)",
+        xlabel = "Mean PC1 Score by Facility",
+        ylabel = "Mean PC2 Score by Facility",
+        title = "Facility PCA Location and Not-Green Rate",
+        label = false,
+    )
+end
+
 
 # ╔═╡ af1af019-a784-4144-a632-e66fca8b1c3b
 let
@@ -332,17 +748,99 @@ let
         :Recency,
         :PrevScore,
         :PrevAssessed,
-        :Qty,
-        :AssetAge,
-        :AssetDesignLife,
+        #:Qty,
+        :NormalizedAssetAge,
+        #:AssetAge,
+        #:AssetDesignLife,
+        :MonthSin,
+        :MonthCos,
         :LogCRV,
-        :Month,
-        :Year,
-        :Climate
+        #:Month,
+        #:Year,
+        :Climate,
+        #:Fac
     ]
-    F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, boilers)
 
-    results, GetPCAPlot(8, explained_ratio), GetLoadings(F, pca_vars_single_lf), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true)
+    modes = length(pca_vars_single_lf)
+    
+    F, results, explained_variance, explained_ratio, scores = CalcSVDAndExplainedVariance(pca_vars_single_lf, wrangled_boilers)
+
+    pca_plot = GetPCAPlot(modes, explained_ratio)
+    loadings_heatmap = GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true)
+    pairs = []
+    for x in 1:modes
+        for y in 1:modes
+            push!(pairs, (x, y))
+        end
+    end
+
+    projection_plots = [
+        GetScoreClassProjection(scores, wrangled_boilers.Score, pc_x, pc_y)
+        for (pc_x, pc_y) in pairs
+    ]
+    
+    scatter_plots = plot(
+        projection_plots...;
+        layout = (modes, modes),
+        size = (modes * 1200, modes * 1200),
+    )
+
+    histogram_plots = [
+        GetPCScoreHistogram(scores, wrangled_boilers.Score, pc)
+        for pc in 1:modes
+    ]
+
+    hist_plots = plot(
+        histogram_plots...;
+        size = (modes*500, modes*500),
+    )
+
+    score_fac_scatter = GetScoreFacScatter(scores)
+
+    pca_plot, loadings_heatmap, scatter_plots, hist_plots, score_fac_scatter
+    #savefig(pca_plot, "pca_plot_reduced.png")
+    #savefig(loadings_heatmap, "loadings_heatmap_reduced_pca.png")
+    #savefig(scatter_plots, "pc_vs_pc_score_scatter.png")
+    #savefig(hist_plots, "pc_vs_score_hists.png")
+end
+
+# ╔═╡ ee72c729-a93a-4ceb-a091-0dd32d1e0555
+md"""
+### Repeat by scaling lifecycle variables
+It is also valid to scale the lifecycle variables to reduce their combined contribution. However results show that they are still relatively dominant.
+"""
+
+# ╔═╡ eecfb266-cd30-4f02-a1e5-61f9427d42d7
+let
+    # Repeat the PCA dividing each lifecycle variable by 4
+    pca_vars_single_lf = [
+        :NormalizedAge,
+        :EffectiveAge,
+        :RSL,
+        :PredictedCI,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :NormalizedAssetAge,
+        #:Qty,
+        #:AssetAge,
+        #:AssetDesignLife,
+        :LogCRV,
+        :Year,
+        :MonthSin,
+        :MonthCos,
+        :Climate,
+        #:Fac
+    ]
+    adjusted_lifecycle_df = wrangled_boilers
+    adjusted_lifecycle_df.NormalizedAge = adjusted_lifecycle_df.NormalizedAge ./ 4
+    adjusted_lifecycle_df.EffectiveAge = adjusted_lifecycle_df.EffectiveAge ./ 4
+    adjusted_lifecycle_df.RSL = adjusted_lifecycle_df.RSL ./ 4
+    adjusted_lifecycle_df.PredictedCI = adjusted_lifecycle_df.PredictedCI ./ 4
+    F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, adjusted_lifecycle_df)
+
+    scaled_lifecycle_pca_plot = plot(GetPCAPlot(13, explained_ratio), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true), size=(2000, 800))
+    #savefig(scaled_lifecycle_pca_plot, "scaled_lifecycle_pca.png")
 end
 
 # ╔═╡ 7606e704-083e-4a5f-8da5-bcdf3bfa3216
@@ -472,84 +970,6 @@ md"""
 ## Interesting Plot 3
 """
 
-# ╔═╡ 4757dd14-b688-49cc-8e73-3878eceff35e
-begin
-    climate_codes = sort(unique(string.(coalesce.(comparison_data.Climate, "Unknown"))))
-
-    function climate_plot(data, heading)
-        d = data[isfinite.(data.Score), :]
-        climate = string.(coalesce.(d.Climate, "Unknown"))
-        green = Float64[]
-        labels = String[]
-
-        for code in climate_codes
-            scores = d.Score[climate .== code]
-            push!(green, isempty(scores) ? NaN : 100 * mean(scores .>= 88))
-            push!(labels, "$code\n(n=$(length(scores)))")
-        end
-        notgreen = 100 .- green
-
-        p = groupedbar(1:length(climate_codes), [green notgreen];
-            bar_position=:stack, bar_width=0.65, fillalpha=0.6, linewidth=0,
-            label=["Green" "Not green"], legend=:outertop, legend_column=2,
-            xticks=(1:length(climate_codes), labels),
-            xlims=(0.5, length(climate_codes) + 0.5),
-            title=heading, xlabel="Climate Code", ylabel="Assessments (%)",
-            size=(max(1100, 140 * length(climate_codes)), 650), grid=false,
-            titlefontsize=13, guidefontsize=12, tickfontsize=11,
-            margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
-        )
-        plot!(p; ylims=(0, 110), yticks=0:20:100, ywiden=false)
-
-        # Place small-percentage labels above the bar.
-        function add_percentage(i, value, y, group)
-            label = "$(round(value; digits=1))%"
-            if value < 8
-                y = 105
-                label = "$group: $label"
-            end
-            annotate!(p, i, y, text(label, 10))
-        end
-
-        for i in eachindex(green)
-            if isnan(green[i])
-                annotate!(p, i, 50, text("No data", 10))
-            else
-                add_percentage(i, notgreen[i], notgreen[i] / 2, "Not green")
-                add_percentage(i, green[i], notgreen[i] + green[i] / 2, "Green")
-            end
-        end
-        p
-    end
-
-    interesting_plot3 = climate_plot(comparison_data, "Green vs Not Green by Climate")
-end
-
-# ╔═╡ d0b92a37-92ed-4ce4-85cb-beba9eaab65a
-md"""
-## Interesting Plot 4
-"""
-
-# ╔═╡ 8eeb40e8-93cd-410b-b6d7-30fa362dca6e
-interesting_plot4 = let
-    d = dropmissing(comparison_data, :AssetAge)
-    d = d[isfinite.(d.AssetAge), :]
-
-    function age_plot(low, high, heading)
-        rows = (d.AssetAge .>= low) .& (d.AssetAge .< high)
-        climate_plot(d[rows, :], "Asset Age: $heading")
-    end
-
-    plot(
-        age_plot(0, 10, "0–<10"), age_plot(10, 20, "10–<20"),
-        age_plot(20, 30, "20–<30"), age_plot(30, 40, "30–<40"),
-        age_plot(40, Inf, "40+");
-        layout=(5, 1), size=(max(1100, 140 * length(climate_codes)), 2700),
-        ylims=(0, 110), yticks=0:20:100, ywiden=false,
-        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
-    )
-end
-
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 md"""
 ## Regression Analysis
@@ -570,13 +990,12 @@ begin
         :RSL,
         :Recency,
         :PrevScore,
-        :PrevAssessed,
         :PredictedCI,
         :Score,
         :Qty,
         :AssetAge,
         :AssetDesignLife,
-        :LogCRV,
+        :CRV,
         :Month,
         :Year,
         :Climate
@@ -601,13 +1020,12 @@ begin
         "RSL",
         "Recency",
         "PrevScore",
-        "PrevAssessed",
         "PredictedCI",
         "Score",
         "Qty",
         "AssetAge",
         "AssetDesignLife",
-        "LogCRV",
+        "CRV",
         "Month",
         "Year",
         "Climate"
@@ -646,13 +1064,12 @@ begin
         "RSL",
         "Recency",
         "PrevScore",
-        "PrevAssessed",
         "PredictedCI",
         "Score",
         "Qty",
         "AssetAge",
         "AssetDesignLife",
-        "LogCRV",
+        "CRV",
         "Month",
         "Year",
         "Climate"
@@ -694,9 +1111,16 @@ md"""
 
 # ╔═╡ Cell order:
 # ╠═e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
-# ╠═8a745a37-637c-49e7-9b80-a00e35e2134d
 # ╟─f92de274-9c7f-4ea2-84a5-d18f97044498
 # ╠═af5b14a9-9e5b-42d4-bc68-abf314fc3928
+# ╠═2b0101e9-083d-4f57-a212-118246c394c0
+# ╠═53453c93-2414-4265-9530-5b8cdb2f6a51
+# ╠═f23ccc17-2d70-4e7b-b773-b690809f1c7b
+# ╠═b63769cc-aaa0-4bae-8305-f4946e7d6200
+# ╠═e1772dde-cfe8-4dbe-85a3-5a8881b44f3f
+# ╠═c2e70042-a52b-4746-bc96-5c2fa45081fb
+# ╠═90195285-709a-4116-9f86-45235d44d1d3
+# ╠═f24d976a-8877-4873-9110-b3f32c1f3078
 # ╟─5ca1e039-ee02-4467-95e0-8f44cb4995db
 # ╠═9371dd2a-8673-4104-b04b-4d91a597427a
 # ╟─43ee48fd-370d-412e-968f-3df0c2b7c422
@@ -707,40 +1131,42 @@ md"""
 # ╠═b078a14b-049e-4398-9c79-85ef7fde2843
 # ╟─78c6cc72-5658-495d-9444-cfa4b4bc582a
 # ╠═64dbadfb-21b1-4ecd-b157-efd6f3a96983
+# ╠═e74edc09-4c17-42f5-898d-34f7a26c3474
 # ╟─b62c7f0d-f9e8-41b6-9eb6-e77f55345806
 # ╟─b23788a2-2890-4417-bb00-9ebd4565b449
 # ╠═03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
-# ╟─a4346d81-ccfe-4376-9cc6-27973e80c095
+# ╠═a4346d81-ccfe-4376-9cc6-27973e80c095
 # ╠═e417d3b5-d72d-43d5-8662-ad3eefce447d
 # ╟─4daad98c-f8a2-4430-946e-8efd6189a008
-# ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
-# ╟─0bf742cc-4661-4a33-bee0-4905860d2562
-# ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
+# ╠═ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# ╠═0bf742cc-4661-4a33-bee0-4905860d2562
+# ╠═e39f1b09-9bce-40d5-b5d9-03946bffe6fe
 # ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
+# ╠═86170372-b428-4e4c-b817-2e2a3be9f8c8
+# ╠═e346bbf0-066e-4de6-bcdd-6c2732756d17
+# ╠═5a3a0107-bed6-440a-9805-5a2b9b483b72
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
-# ╟─7606e704-083e-4a5f-8da5-bcdf3bfa3216
+# ╟─ee72c729-a93a-4ceb-a091-0dd32d1e0555
+# ╠═eecfb266-cd30-4f02-a1e5-61f9427d42d7
+# ╠═7606e704-083e-4a5f-8da5-bcdf3bfa3216
 # ╠═12b33241-044c-4631-a9b9-e9c44e24847a
-# ╟─0263eb8b-4e72-4ebc-988b-e524302c2d6a
+# ╠═359b5901-74ec-4b8f-9e7c-7c906f943dec
 # ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
 # ╠═e7fae12f-3e0b-4e9f-a874-4cb0db599494
-# ╟─bb5b17b7-ad96-4e96-b67c-dc06c1875caf
-# ╠═345182d1-e582-4498-ad3a-daed465891ec
-# ╠═9c2bd780-dca9-4778-8ae3-58003769aefb
-# ╟─7bd05cf2-7425-4f0e-b376-ef690d99b74f
-# ╠═d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
-# ╠═4757dd14-b688-49cc-8e73-3878eceff35e
-# ╟─d0b92a37-92ed-4ce4-85cb-beba9eaab65a
-# ╠═8eeb40e8-93cd-410b-b6d7-30fa362dca6e
+# ╟─345182d1-e582-4498-ad3a-daed465891ec
+# ╠═33f8fa4d-737b-4f2e-9a8c-da0715e7b332
+# ╠═9b583d56-dab5-4f2a-b5a7-8199b0eea251
+# ╟─409978e5-8f83-49f9-b46b-2f39fac7570f
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
 # ╠═c971b211-e043-47b3-88b7-ad73b6872796
-# ╟─b9c194d6-87fe-459e-82f6-e551d4889747
+# ╠═b9c194d6-87fe-459e-82f6-e551d4889747
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 # ╠═17d5f78e-7188-4496-b00e-36be135fe37f
-# ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
-# ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
+# ╠═cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
+# ╠═e553e6b3-7b8e-4029-b823-eb98362c49a4
 # ╠═c4f0042e-dac8-4caf-b983-8bc9678b4d1b
-# ╟─c2324815-aa18-43a0-b9f3-cd7dbcde5647
+# ╠═c2324815-aa18-43a0-b9f3-cd7dbcde5647
 # ╠═8bc9c3b1-0ffb-451b-bae9-bf3d209355b6
-# ╟─2defcea8-94d2-4182-b313-7b242d185c08
+# ╠═2defcea8-94d2-4182-b313-7b242d185c08
