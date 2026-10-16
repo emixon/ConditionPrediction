@@ -674,7 +674,7 @@ function GetPCScoreHistogram(
         label = "Not Green (Score < $threshold)",
         xlabel = "PC$pc Coordinate",
         ylabel = "Density",
-        title = "PC$pc Distribution by Assessment Class",
+        title = "PC$pc Distribution by Assessment Score",
         size = (1200, 800),
         dpi = 200,
         titlefontsize = 24,
@@ -759,7 +759,7 @@ let
         :RSL,
         #:NormalizedAge,
         #:EffectiveAge,
-        #:PredictedCI,  # Might be useful paired with RSL for some reason
+        :PredictedCI,  # Might be useful paired with RSL for some reason
         #:Recency,
         #:PrevScore,
         :PrevAssessed,  # Best performing between Recency/PrevScore/PrevAssessed
@@ -771,7 +771,7 @@ let
         :MonthCos,
         :LogCRV,  # Currently divided by Qty to normalize individual boiler cost
         :Climate,
-        :PercentGreen
+        #:PercentGreen
     ]#, 
     #spec_indicator_cols, # Too many columns
     #fac_indicator_cols)  # Too many columns
@@ -812,6 +812,7 @@ let
     )
 
     pca_plot, loadings_heatmap, score_histograms, score_percentgreen_3d
+    #savefig(score_histograms, "RSL_CI_no_PGreen.png")
 end
 
 # ╔═╡ ee72c729-a93a-4ceb-a091-0dd32d1e0555
@@ -883,7 +884,16 @@ function notgreen_horizontal_plot(data, column, heading)
         ylims = (0, 60),
         label = "",
         legend = :bottomright,
-        size = (1000, 1000)
+        size = (1600, 1000),
+        dpi = 200,
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+    
+        left_margin = 18mm,
+        bottom_margin = 14mm,
+        top_margin = 10mm,
+        right_margin = 8mm,
     )
 
     overall = 100 * mean(d.NotGreen)
@@ -900,11 +910,14 @@ function notgreen_horizontal_plot(data, column, heading)
 end
 
 # ╔═╡ d917c587-1309-47d2-874f-55b823d4a4e9
-notgreen_horizontal_plot(
+p_ng_fac = notgreen_horizontal_plot(
     boilers,
     :Fac,
-    "Facilities with Highest Not-Green Boiler Percentages";
+    "Facilities with Highest % Not-Green Boiler";
 )
+
+# ╔═╡ e7616d5c-94d6-4b2e-a739-883ccf248b97
+#savefig(p_ng_fac, "not_green_fac_hist.png")
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2506,7 +2519,7 @@ version = "1.13.0+0"
 # ╟─f92de274-9c7f-4ea2-84a5-d18f97044498
 # ╟─af5b14a9-9e5b-42d4-bc68-abf314fc3928
 # ╟─2b0101e9-083d-4f57-a212-118246c394c0
-# ╟─53453c93-2414-4265-9530-5b8cdb2f6a51
+# ╠═53453c93-2414-4265-9530-5b8cdb2f6a51
 # ╟─f23ccc17-2d70-4e7b-b773-b690809f1c7b
 # ╟─b63769cc-aaa0-4bae-8305-f4946e7d6200
 # ╟─e1772dde-cfe8-4dbe-85a3-5a8881b44f3f
@@ -2530,17 +2543,18 @@ version = "1.13.0+0"
 # ╠═a4346d81-ccfe-4376-9cc6-27973e80c095
 # ╠═e417d3b5-d72d-43d5-8662-ad3eefce447d
 # ╟─4daad98c-f8a2-4430-946e-8efd6189a008
-# ╠═e65aef6a-1488-4a6e-b6b8-44b7808438c6
-# ╠═ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
-# ╠═0bf742cc-4661-4a33-bee0-4905860d2562
-# ╠═e39f1b09-9bce-40d5-b5d9-03946bffe6fe
-# ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
+# ╟─e65aef6a-1488-4a6e-b6b8-44b7808438c6
+# ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# ╟─0bf742cc-4661-4a33-bee0-4905860d2562
+# ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
+# ╟─653ae9d0-bca6-4778-a8d3-9d07dbf143c2
 # ╠═e346bbf0-066e-4de6-bcdd-6c2732756d17
-# ╠═5a3a0107-bed6-440a-9805-5a2b9b483b72
+# ╟─5a3a0107-bed6-440a-9805-5a2b9b483b72
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
 # ╟─ee72c729-a93a-4ceb-a091-0dd32d1e0555
 # ╠═eecfb266-cd30-4f02-a1e5-61f9427d42d7
 # ╠═5e6c874b-ed55-4630-9098-3baac2a12bad
 # ╠═d917c587-1309-47d2-874f-55b823d4a4e9
+# ╠═e7616d5c-94d6-4b2e-a739-883ccf248b97
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
