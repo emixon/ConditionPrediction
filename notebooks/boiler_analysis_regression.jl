@@ -1,0 +1,770 @@
+### A Pluto.jl notebook ###
+# v1.0.3
+
+using Markdown
+using InteractiveUtils
+
+# ╔═╡ e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
+begin
+    import Pkg
+
+    Pkg.activate(Base.current_project())
+    Pkg.instantiate()
+    
+    using ConditionPrediction
+    using DataFrames
+    using StatsPlots
+    using Statistics
+    using LinearAlgebra
+    using StatsBase
+end
+
+# ╔═╡ ea18b937-bd81-4517-a04a-ca4987d37319
+begin
+	Pkg.add(["HypothesisTests"])
+	
+	using HypothesisTests
+end
+
+# ╔═╡ 8a745a37-637c-49e7-9b80-a00e35e2134d
+
+
+# ╔═╡ f92de274-9c7f-4ea2-84a5-d18f97044498
+md"""
+### Load Data and Overview
+This will load the dataset and filters the data of interest, saving to a dataframe called "boilers".
+
+It also defines a helper function called getHistAll that plots 12 basic histograms of the data set.
+"""
+
+# ╔═╡ af5b14a9-9e5b-42d4-bc68-abf314fc3928
+begin
+    path = joinpath( @__DIR__, "..", "data", "boilers.csv")
+    MEC_Name = "Boilers"
+    MEC = 1
+    df = load_data(path)
+    boilers = df[df. MEC .== MEC, :]
+    function getHistAll(d)
+        plot(
+            histogram(d.NormalizedAge; bins=100, title="$MEC_Name Normalized Age"),
+            histogram(d.PredictedCI;  bins=100, title="$MEC_Name Predicted CI"),
+            histogram(d.Score;  bins=100, title="$MEC_Name Assessed Score"),
+            histogram(d.Recency;      bins=100, title="$MEC_Name Recency"),
+            histogram(d.Spec, title="$MEC_Name Specification"),
+            histogram(d.DesignLife, title="$MEC_Name Design Life"),
+            histogram(d.Qty, title="$MEC_Name Quantity"),
+            histogram(d.EffectiveAge; bins=100, title="$MEC_Name Effective Age"),
+            histogram(d.RSL; bins=100, title="$MEC_Name Remaining Service Life"),
+            histogram(d.CRV; bins=100, title="$MEC_Name Component Replacement Value"),
+            histogram(d.Fac, title="$MEC_Name Facility Code"),
+            histogram(d.AssetAge, title="$MEC_Name Asset Age"),
+            histogram(d.Month, bins=12, title="$MEC_Name Month of Assessment"),
+            histogram(d.Year, title="$MEC_Name Year of Assessment"),
+            histogram(d.Climate, title="$MEC_Name Climate"),
+            histogram(d.AssetDesignLife, title="$MEC_Name Asset Design Life"),
+            layout=(4, 4), size=(2400, 1800)
+        )
+    end
+
+    getHistAll(boilers)
+end
+
+# ╔═╡ 5ca1e039-ee02-4467-95e0-8f44cb4995db
+md"""
+### Describe The Boilers Data Frame
+Shows the initially available columns and types as well as basic stats.
+"""
+
+# ╔═╡ 9371dd2a-8673-4104-b04b-4d91a597427a
+describe(boilers, :all)
+
+# ╔═╡ 43ee48fd-370d-412e-968f-3df0c2b7c422
+md"""
+# Begin Exploratory Analysis
+"""
+
+# ╔═╡ 3426ad4c-a340-46c3-994a-0e30dccef086
+md"""
+## Data Wrangling
+"""
+
+# ╔═╡ 942ad3ee-eab0-465e-b6d8-f36112bc4bec
+md"""
+### Removing unecessary properties
+With the dataset filtered on MEC 171 (Boilers), we will only have one value in all observations for the :MEC, :System, and :UOM properties.  Those columns effectively carry no information and can be ommitted from PCA.
+"""
+
+# ╔═╡ 8e86278f-bbec-4f50-8961-41a45bf2aa94
+select!(boilers, Not([:MEC, :System, :UOM]))
+
+# ╔═╡ 745d02a7-6b60-47d3-973c-0f428013c265
+md"""
+### Addressing observations with missing data
+The :Recency and :PrevScore columns of the data will have "missing" data for cases where the component has never been assessed before. Additionaly, not all components have climate data. Since knowing the component has never been assessed could carry its own predictive value, we cannot simply replace "missing" with the mean values in this case. We must first create a new column of Type Bit {0, 1} that preserves the information of a component having previously been assessed or "never assessed".  In this case we will create a column named :PrevAssessed set to 0 for "missing" values and 1 for values that have been assessed in the past.
+
+Once the new :PrevAssessed column is created, we will replace "missing" values with the mean of their respective columns, thus addressing the missing values without losing predictive information.
+
+For the missing Climate data, we will simply replace "missing" values with the mean for available data prior to PCA.
+"""
+
+# ╔═╡ b078a14b-049e-4398-9c79-85ef7fde2843
+begin
+	boilers_raw_data = boilers
+	boilers.PrevAssessed = Int.(.!ismissing.(boilers.PrevScore))
+	
+	mean_PrevScore = mean(skipmissing(boilers.PrevScore))
+	mean_Recency = mean(skipmissing(boilers.Recency))
+	mean_Climate = mean(skipmissing(boilers.Climate))
+	
+	boilers.PrevScore = coalesce.(boilers.PrevScore, mean_PrevScore)
+	boilers.Recency = coalesce.(boilers.Recency, mean_Recency)
+	boilers.Climate = coalesce.(boilers.Climate, mean_Climate)
+
+	# New Boilers df
+	boilers
+end
+
+# ╔═╡ 78c6cc72-5658-495d-9444-cfa4b4bc582a
+md"""
+### The \$1,000,000 boiler
+The CRV column values notably cover a range several orders of magnitude more than the rest of our values. When doing a PCA analysis, this will cause CRV to dominate the first component due simply to its numerical scale. The typical recommended action to take in this case is to utilize a log scale for such a datatype when doing PCA. So we will add a LogCRV column to our boilers dataframe for this reason. As shown by the plot below, this also makes our CRV data more symmetric and lowers the influence of the drastically more expensive outliers.
+"""
+
+# ╔═╡ 64dbadfb-21b1-4ecd-b157-efd6f3a96983
+begin
+	crv = boilers[!, :CRV]
+	scrv = sort(crv, rev=true)
+	boilers.LogCRV = log1p.(boilers.CRV)
+	log_crv = boilers[!, :LogCRV]
+	log_scrv = sort(log_crv, rev=true)
+	crv_plot = plot(scrv, xlabel="Index", ylabel="Cost", title="CRV", st=:scatter)
+	log_crv_plot = plot(log_scrv, xlabel="Index", ylabel="Cost", title="Log CRV", st=:scatter)
+	plot(crv_plot, log_crv_plot, layout=(1,2), size=(1200, 800))
+end
+
+# ╔═╡ b62c7f0d-f9e8-41b6-9eb6-e77f55345806
+md"""
+## Principal Component Analysis
+In our goal to predict assessment scores for a given component, it is useful to perform a principal component analysis to identify which properties of the observation provide the majority of the variance. This allows us to de-noise our prediction models by omitting properties that have very little contribution to the information.
+"""
+
+# ╔═╡ b23788a2-2890-4417-bb00-9ebd4565b449
+md"""
+### Removing Identifier Columns and Standardization
+The data wrangling process took care of most of the data cleanup and reshaping for the PCA, but we still have identifier columns that are not really quantitative measurements. The :Id, :Spec, and :Fac should be omitted from the PCA, though :Spec and :Fac can still be used later when developing predictive models. Since our goal ultimately is to predict the :Score of the component, we will also want to omit :Score from the initial PCA to avoid "data leakage".
+
+Additionally, while we addressed CRV's order of magnitude, there are still a wide numerical range of units.  To ensure values with larger numerical scales (like :AssetAge) don't dominate the analysis, in addition to centering the data by subtracting the mean of each attribute, we also standardize by dividing each centered attribute by its standard deviation.
+"""
+
+# ╔═╡ 03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
+begin
+    # The Columns we want to use for the PCA
+    pca_vars = [
+        :NormalizedAge,
+        :EffectiveAge,
+        :RSL,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :PredictedCI,
+        :Qty,
+        :AssetAge,
+        :AssetDesignLife,
+        :LogCRV,
+        :Year,
+        :Month,
+        :Climate
+    ]
+
+    X = Matrix(select(boilers, pca_vars))' # Select columns, convert to matrix, and transform
+    
+    X̄ = mean(X, dims=2) # Get the Mean
+    σ = std(X, dims=2) # Get the Standard Deviation
+
+    Z = (X .- X̄) ./ σ # Normalize AND Standardize
+
+    F = svd(Z) # Get the SVD
+
+    explained_variance = F.S .^ 2 ./ (size(Z, 2) - 1)
+    explained_ratio = explained_variance ./ sum(explained_variance)
+    cumulative_ratio = cumsum(explained_ratio)
+
+    DataFrame(
+        PC = 1:length(F.S),
+        ExplainedVariance = explained_variance,
+        ExplainedRatio = explained_ratio,
+        CumulativeRatio = cumulative_ratio,
+    )
+end
+
+# ╔═╡ a4346d81-ccfe-4376-9cc6-27973e80c095
+begin
+    modes = 11
+    plot(
+        1:modes,
+        explained_ratio[1:modes] .* 100;
+        marker = :circle,
+        xlabel = "Principal Component",
+        ylabel = "Explained Variance (%)",
+        title = "Boiler PCA Plot",
+        legend = false,
+    )
+end
+
+# ╔═╡ e417d3b5-d72d-43d5-8662-ad3eefce447d
+begin
+    loadings = DataFrame(
+        Variable = string.(pca_vars),
+        PC1 = F.U[:, 1],
+        PC2 = F.U[:, 2],
+        PC3 = F.U[:, 3],
+        PC4 = F.U[:, 4],
+        PC5 = F.U[:, 5],
+        PC6 = F.U[:, 6],
+        PC7 = F.U[:, 7],
+        PC8 = F.U[:, 8],
+        PC9 = F.U[:, 9],
+        PC10 = F.U[:, 10],
+        PC11 = F.U[:, 11],
+        PC12 = F.U[:, 12],
+        PC13 = F.U[:, 13],
+        PC14 = F.U[:, 14],
+    )
+
+    sort!(loadings, :PC1, by=abs, rev=true)
+
+    loadings
+end
+
+# ╔═╡ 4daad98c-f8a2-4430-946e-8efd6189a008
+md"""
+### Repeat the analysis less redundant age measures
+The initial analysis showed a high ratio of explained variance for PC1 (~34%), however, the variables dominating the PC were all lifecycle representations that are mathematically similar and therefore potentially redundant.
+
+NormalizedAge: -.496
+
+RSL: .491
+
+PredictedCI: .487
+
+EffectiveAge -.479
+
+Below we repeat the analysis while keeping just one of the lifecycle parameters (in this case RSL). RSL is arbitrarily chosen in this case, mostly due to it being arguably the easiest for most people to understand from an interpretability standpoint. We could, however, just as easily repeat with any of the others.
+
+We start by defining some helper functions to help with generalization of the process in case we want to repeat it from different perspectives. (This also just helps avoid Julia "redifined variable" issues)
+
+The final result shows a much smoother decline in explained variance for our remaining PCs, with PC1-7 explaining ~93% of the variance.
+
+Initial take-aways from this suggest that predictive models would potentially benefit from choosing only one of :NormalizedAge, :RSL, :PredictedCI, or :EffectiveAge to avoid duplicate encoded information. While not conclusively an expected improvement, it does suggest it to be a reasonable test case.
+"""
+
+# ╔═╡ ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# In case we want to do this with more variations, we'll generalize with a function.
+function CalcSVDAndExplainedVariance(pca_variables, df)
+	X = Matrix(select(df, pca_variables))' # Select columns, convert to matrix, and transform
+    
+    X̄ = mean(X, dims=2) # Get the Mean
+    σ = std(X, dims=2) # Get the Standard Deviation
+
+    Z = (X .- X̄) ./ σ # Normalize AND Standardize
+
+    F = svd(Z) # Get the SVD
+
+    explained_variance = F.S .^ 2 ./ (size(Z, 2) - 1)
+    explained_ratio = explained_variance ./ sum(explained_variance)
+    cumulative_ratio = cumsum(explained_ratio)
+
+    results = DataFrame(
+        PC = 1:length(F.S),
+        ExplainedVariance = explained_variance,
+        ExplainedRatio = explained_ratio,
+        CumulativeRatio = cumulative_ratio,
+    )
+    return F, results, explained_variance, explained_ratio
+end
+
+# ╔═╡ 0bf742cc-4661-4a33-bee0-4905860d2562
+function GetPCAPlot(modes, explained_ratio)
+
+	plot(
+        1:modes,
+        explained_ratio[1:modes] .* 100;
+        marker = :circle,
+        xlabel = "Principal Component",
+        ylabel = "Explained Variance (%)",
+        title = "Boiler PCA Plot",
+        legend = false,
+    )
+end
+
+# ╔═╡ e39f1b09-9bce-40d5-b5d9-03946bffe6fe
+function GetLoadings(F, pca_vars; sort_by = :PC1)
+    loadings = DataFrame(
+        Variable = string.(pca_vars),
+    )
+
+    for k in axes(F.U, 2)
+        loadings[!, Symbol("PC$k")] = F.U[:, k]
+    end
+    sort!(loadings, sort_by, by = abs, rev = true)
+    return loadings
+end
+
+# ╔═╡ 653ae9d0-bca6-4778-a8d3-9d07dbf143c2
+function GetLoadingsHeatMap(F, pca_variables; squared=false)
+	k = size(F.U, 2)
+    L = F.U[:, 1:k]
+
+    limit = maximum(abs, L)
+
+    heatmap(
+        1:k,
+        string.(pca_variables),
+        (squared ? L .^ 2 : L);
+        xlabel = "Principal Component",
+        ylabel = "Variable",
+        title = "PCA Loading Heatmap",
+        colorbar_title = "Loading",
+        clims = (squared ? (0, limit) : (-limit, limit)),
+        c = (squared ? :viridis : :RdBu),
+        yflip = true,
+    )
+end
+
+# ╔═╡ af1af019-a784-4144-a632-e66fca8b1c3b
+let
+    # Repeat the PCA with only one condition/lifecycle representative (arbitrarily choosing RSL, we could also try others)
+    pca_vars_single_lf = [
+        :RSL,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :Qty,
+        :AssetAge,
+        :AssetDesignLife,
+        :LogCRV,
+        :Month,
+        :Year,
+        :Climate
+    ]
+    F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, boilers)
+
+    results, GetPCAPlot(8, explained_ratio), GetLoadings(F, pca_vars_single_lf), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true)
+end
+
+# ╔═╡ 7606e704-083e-4a5f-8da5-bcdf3bfa3216
+md"""
+## Two Comparison Groups
+"""
+
+# ╔═╡ 12b33241-044c-4631-a9b9-e9c44e24847a
+begin
+    # Load separate data
+    comparison_data = dropmissing(load_data(path), :Score)
+
+    # Separate observations by assessment score.
+    green_boilers = comparison_data[comparison_data.Score .>= 88, :]
+    notgreen_boilers = comparison_data[comparison_data.Score .< 88, :]
+
+    # Count observations
+    group_summary = DataFrame(
+        Group = ["Green (Score >= 88)", "Not green (Score < 88)"],
+        N = [nrow(green_boilers), nrow(notgreen_boilers)],
+    )
+    # Calculate the percentage
+    group_summary.Percent = round.(
+        100 .* group_summary.N ./ sum(group_summary.N);
+        digits =2,
+    )
+    group_summary
+end
+
+# ╔═╡ 0263eb8b-4e72-4ebc-988b-e524302c2d6a
+md"""
+## Two Comparison Groups
+
+Assessment records are divided into green (`Score ≥ 88`) and not-green (`Score < 88`) groups based on the current assessment score. Records without a current score are excluded because their condition status cannot be assigned. The summary table reports the number and percentage of observations in each group, establishing the distribution of condition status before examining lifecycle characteristics, assessment history, asset age, and climate. Since unequal group sizes can make comparisons based on raw counts misleading, the subsequent figures use proportions to compare distributions and condition percentages. Sample-size labels indicate the number of observations supporting each comparison. These counts represent assessment records rather than necessarily distinct boilers.
+"""
+
+# ╔═╡ 5d26ccac-1d20-44f7-8696-440e91eeabf1
+md"""
+## Interesting Plot 1
+"""
+
+# ╔═╡ e7fae12f-3e0b-4e9f-a874-4cb0db599494
+interesting_plot1 = let
+    function compare_histogram(variable, heading)
+        green = filter(isfinite, collect(skipmissing(green_boilers[!, variable])))
+        notgreen = filter(isfinite, collect(skipmissing(notgreen_boilers[!, variable])))
+
+        if isempty(green) || isempty(notgreen)
+            error("Both groups need recorded values for $variable.")
+        end
+
+        # Use matching bin boundaries.
+        low, high = extrema(vcat(green, notgreen))
+        if low == high
+            low -= 0.5
+            high += 0.5
+        end
+        edges = range(low, nextfloat(Float64(high)); length=31)
+
+        histogram([green, notgreen];
+            bins=edges, normalize=:probability, alpha=0.5,
+            label=["Green (n=$(length(green)))" "Not green (n=$(length(notgreen)))"],
+            title=heading, xlabel=heading, ylabel="Proportion within group",
+        )
+    end
+
+    plot(
+        compare_histogram(:RSL, "Remaining Service Life"),
+        compare_histogram(:PrevScore, "Previous Assessment Score");
+        layout=(1, 2), size=(1200, 600),
+        legend=:outertop, legend_column=2, legendfontsize=9,
+        titlefontsize=13, guidefontsize=11, tickfontsize=10,
+        margin=6Plots.mm, left_margin=10Plots.mm, bottom_margin=12Plots.mm,
+    )
+end
+
+# ╔═╡ bb5b17b7-ad96-4e96-b67c-dc06c1875caf
+md"""
+## Interesting Plot 1
+
+Remaining service life (`RSL`) and previous assessment score (`PrevScore`) are compared between the green and not-green groups to examine differences in lifecycle characteristics and assessment history. RSL provides a lifecycle measure, while the previous score allows earlier condition to be examined alongside the current classification. Identical bin boundaries and proportions calculated separately within each group support comparison despite unequal sample sizes. A bar height of 0.20 therefore represents 20% of the available observations in that condition group, not 20% of the complete dataset. Differences in concentration, spread, and overlap indicate how the recorded properties distinguish the groups without establishing predictive performance. Missing and nonfinite values are excluded separately for each variable, so the previous-score panel includes only records with a usable previous assessment.
+"""
+
+# ╔═╡ 345182d1-e582-4498-ad3a-daed465891ec
+md"""
+## Interesting Plot 2
+"""
+
+# ╔═╡ 9c2bd780-dca9-4778-8ae3-58003769aefb
+interesting_plot2 = let
+    d = dropmissing(comparison_data, :AssetAge)
+    d = d[isfinite.(d.Score) .& isfinite.(d.AssetAge), :]
+
+    edges = [0, 10, 20, 30, 40, Inf]
+    ages = ["0–<10", "10–<20", "20–<30", "30–<40", "40+"]
+    green = Float64[]
+    labels = String[]
+
+    for i in eachindex(ages)
+        scores = d.Score[(d.AssetAge .>= edges[i]) .& (d.AssetAge .< edges[i + 1])]
+        push!(green, isempty(scores) ? NaN : 100 * mean(scores .>= 88))
+        push!(labels, "$(ages[i])\n(n=$(length(scores)))")
+    end
+    notgreen = 100 .- green
+
+    plot(1:length(ages), [green notgreen];
+        label=["Green" "Not green"], legend=:outertop, legend_column=2,
+        markershape=[:circle :diamond], linestyle=[:solid :dash], linewidth=3,
+        xticks=(1:length(ages), labels), xlims=(0.5, length(ages) + 0.5),
+        ylims=(-3, 103), yticks=0:20:100,
+        title="Green vs Not Green Across Asset-Age Groups",
+        xlabel="Asset-Age Group", ylabel="Assessments within age group (%)",
+        size=(1000, 600), titlefontsize=13, guidefontsize=12, tickfontsize=11,
+        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=14Plots.mm,
+    )
+end
+
+# ╔═╡ d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
+md"""
+## Interesting Plot 2
+
+Green and not-green percentages are compared within five asset-age intervals: 0–<10, 10–<20, 20–<30, 30–<40, and 40+. Unlike Plot 1, which examines variable distributions within condition groups, this figure examines condition proportions within age groups. Each percentage is calculated using the total number of eligible assessments in its age interval, allowing differences in condition status to be distinguished from differences in the number of available records. The two percentages sum to 100% for each interval containing observations, and the sample-size labels provide context for interpreting the comparison. Although the points are connected, they represent separate groups of assessment records rather than deterioration tracked for individual boilers over time. The broad intervals, particularly the open-ended 40+ category, should also be considered when interpreting age-related patterns.
+"""
+
+# ╔═╡ d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
+md"""
+## Interesting Plot 3
+"""
+
+# ╔═╡ 4757dd14-b688-49cc-8e73-3878eceff35e
+begin
+    climate_codes = sort(unique(string.(coalesce.(comparison_data.Climate, "Unknown"))))
+
+    function climate_plot(data, heading)
+        d = data[isfinite.(data.Score), :]
+        climate = string.(coalesce.(d.Climate, "Unknown"))
+        green = Float64[]
+        labels = String[]
+
+        for code in climate_codes
+            scores = d.Score[climate .== code]
+            push!(green, isempty(scores) ? NaN : 100 * mean(scores .>= 88))
+            push!(labels, "$code\n(n=$(length(scores)))")
+        end
+        notgreen = 100 .- green
+
+        p = groupedbar(1:length(climate_codes), [green notgreen];
+            bar_position=:stack, bar_width=0.65, fillalpha=0.6, linewidth=0,
+            label=["Green" "Not green"], legend=:outertop, legend_column=2,
+            xticks=(1:length(climate_codes), labels),
+            xlims=(0.5, length(climate_codes) + 0.5),
+            title=heading, xlabel="Climate Code", ylabel="Assessments (%)",
+            size=(max(1100, 140 * length(climate_codes)), 650), grid=false,
+            titlefontsize=13, guidefontsize=12, tickfontsize=11,
+            margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
+        )
+        plot!(p; ylims=(0, 110), yticks=0:20:100, ywiden=false)
+
+        # Place small-percentage labels above the bar.
+        function add_percentage(i, value, y, group)
+            label = "$(round(value; digits=1))%"
+            if value < 8
+                y = 105
+                label = "$group: $label"
+            end
+            annotate!(p, i, y, text(label, 10))
+        end
+
+        for i in eachindex(green)
+            if isnan(green[i])
+                annotate!(p, i, 50, text("No data", 10))
+            else
+                add_percentage(i, notgreen[i], notgreen[i] / 2, "Not green")
+                add_percentage(i, green[i], notgreen[i] + green[i] / 2, "Green")
+            end
+        end
+        p
+    end
+
+    interesting_plot3 = climate_plot(comparison_data, "Green vs Not Green by Climate")
+end
+
+# ╔═╡ d0b92a37-92ed-4ce4-85cb-beba9eaab65a
+md"""
+## Interesting Plot 4
+"""
+
+# ╔═╡ 8eeb40e8-93cd-410b-b6d7-30fa362dca6e
+interesting_plot4 = let
+    d = dropmissing(comparison_data, :AssetAge)
+    d = d[isfinite.(d.AssetAge), :]
+
+    function age_plot(low, high, heading)
+        rows = (d.AssetAge .>= low) .& (d.AssetAge .< high)
+        climate_plot(d[rows, :], "Asset Age: $heading")
+    end
+
+    plot(
+        age_plot(0, 10, "0–<10"), age_plot(10, 20, "10–<20"),
+        age_plot(20, 30, "20–<30"), age_plot(30, 40, "30–<40"),
+        age_plot(40, Inf, "40+");
+        layout=(5, 1), size=(max(1100, 140 * length(climate_codes)), 2700),
+        ylims=(0, 110), yticks=0:20:100, ywiden=false,
+        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
+    )
+end
+
+# ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
+md"""
+## Regression Analysis
+"""
+
+# ╔═╡ 90916ca7-d937-4a85-b40d-a69c23e38562
+md"""
+### Pearson Correlation Analysis
+"""
+
+# ╔═╡ d832c11a-a8b3-4f92-9a30-caccc1d6b28e
+begin
+
+	# The Columns we want to use for the correlation analysis
+    cor_vars = [
+        :NormalizedAge,
+        :EffectiveAge,
+        :RSL,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :PredictedCI,
+        :Score,
+        :Qty,
+        :AssetAge,
+        :AssetDesignLife,
+        :LogCRV,
+        :Month,
+        :Year,
+        :Climate
+    ]
+    
+	# create matrix for Pearson correlation
+	boilers_cor = Matrix(select(boilers_raw_data, cor_vars))
+	
+    # calculate Spearman correlation coefficients
+    pearson_matrix = cor(boilers_cor)
+end
+
+# ╔═╡ c971b211-e043-47b3-88b7-ad73b6872796
+begin
+	# CREATE HEATMAP
+
+	# create data labels
+	
+	pearson_labels = [
+		"NormalizedAge",
+        "EffectiveAge",
+        "RSL",
+        "Recency",
+        "PrevScore",
+        "PrevAssessed",
+        "PredictedCI",
+        "Score",
+        "Qty",
+        "AssetAge",
+        "AssetDesignLife",
+        "LogCRV",
+        "Month",
+        "Year",
+        "Climate"
+	]
+
+	# create mask to hide redundant values
+	pearson_matrix_masked = copy(pearson_matrix)
+	pearson_matrix_masked[triu!(trues(size(pearson_matrix_masked)), 1)] .= NaN
+	
+	# plot heatmap
+	heatmap(pearson_labels, pearson_labels, pearson_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, title = "Pearson Corrrelation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
+end
+
+# ╔═╡ b9c194d6-87fe-459e-82f6-e551d4889747
+md"""
+### Spearman Correlation Analysis
+"""
+
+# ╔═╡ 09771c81-3e9c-42ea-be1a-e389f0bcd906
+md"""
+To quantify the strength of monotonic relationships between variables in the dataset, a pairwise correlation analysis was conducted. Spearman’s rank correlation coefficient (ρ) was calculated for each combination of variable pairs. The results indicate that Score, an Expert assessor’s assigned condition rating of a given boiler, is not explained by a single correlation with another variable. Therefore, a multivariate approach is needed.
+"""
+
+# ╔═╡ 5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
+begin
+	# create matrix for correlation
+	boilers_spearman = Matrix(select(boilers_raw_data, cor_vars))
+	# calculate Spearman correlation coefficients
+    spearman_matrix = corspearman(boilers_cor)
+end
+
+# ╔═╡ 6dffd504-3993-443b-a5e8-b4ba47b3b107
+begin
+	# statistical significance
+	x = [1, 2, 3, 4, 5]
+	y = [5, 6, 7, 8, 7]
+	test_result = CorrelationTest(x, y_vec, method=:spearman)
+	println(test_result)
+end
+
+# ╔═╡ 17d5f78e-7188-4496-b00e-36be135fe37f
+begin
+	# CREATE SPEARMAN HEATMAP
+
+	# create data labels
+	
+	spearman_labels = [
+		"NormalizedAge",
+        "EffectiveAge",
+        "RSL",
+        "Recency",
+        "PrevScore",
+        "PrevAssessed",
+        "PredictedCI",
+        "Score",
+        "Qty",
+        "AssetAge",
+        "AssetDesignLife",
+        "LogCRV",
+        "Month",
+        "Year",
+        "Climate"
+	]
+
+	# create mask to hide redundant values
+	spearman_matrix_masked = copy(spearman_matrix)
+	spearman_matrix_masked[triu!(trues(size(spearman_matrix_masked)), 1)] .= NaN
+	
+	# plot heatmap
+	heatmap(spearman_labels, spearman_labels, spearman_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, title = "Spearman Correlation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
+end
+
+# ╔═╡ cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
+md"""
+# Predictive Models
+"""
+
+# ╔═╡ e553e6b3-7b8e-4029-b823-eb98362c49a4
+md"""
+## Artificial Neural Network (ANN) Predictive Model
+"""
+
+# ╔═╡ c4f0042e-dac8-4caf-b983-8bc9678b4d1b
+
+
+# ╔═╡ c2324815-aa18-43a0-b9f3-cd7dbcde5647
+md"""
+## Decision Tree (XGBoost) Predictive Model
+"""
+
+# ╔═╡ 8bc9c3b1-0ffb-451b-bae9-bf3d209355b6
+
+
+# ╔═╡ 2defcea8-94d2-4182-b313-7b242d185c08
+md"""
+## Quantile Distribution Model
+"""
+
+# ╔═╡ Cell order:
+# ╠═e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
+# ╠═8a745a37-637c-49e7-9b80-a00e35e2134d
+# ╟─f92de274-9c7f-4ea2-84a5-d18f97044498
+# ╠═af5b14a9-9e5b-42d4-bc68-abf314fc3928
+# ╟─5ca1e039-ee02-4467-95e0-8f44cb4995db
+# ╠═9371dd2a-8673-4104-b04b-4d91a597427a
+# ╟─43ee48fd-370d-412e-968f-3df0c2b7c422
+# ╟─3426ad4c-a340-46c3-994a-0e30dccef086
+# ╟─942ad3ee-eab0-465e-b6d8-f36112bc4bec
+# ╠═8e86278f-bbec-4f50-8961-41a45bf2aa94
+# ╟─745d02a7-6b60-47d3-973c-0f428013c265
+# ╠═b078a14b-049e-4398-9c79-85ef7fde2843
+# ╟─78c6cc72-5658-495d-9444-cfa4b4bc582a
+# ╠═64dbadfb-21b1-4ecd-b157-efd6f3a96983
+# ╟─b62c7f0d-f9e8-41b6-9eb6-e77f55345806
+# ╟─b23788a2-2890-4417-bb00-9ebd4565b449
+# ╠═03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
+# ╟─a4346d81-ccfe-4376-9cc6-27973e80c095
+# ╠═e417d3b5-d72d-43d5-8662-ad3eefce447d
+# ╟─4daad98c-f8a2-4430-946e-8efd6189a008
+# ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# ╟─0bf742cc-4661-4a33-bee0-4905860d2562
+# ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
+# ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
+# ╠═af1af019-a784-4144-a632-e66fca8b1c3b
+# ╟─7606e704-083e-4a5f-8da5-bcdf3bfa3216
+# ╠═12b33241-044c-4631-a9b9-e9c44e24847a
+# ╟─0263eb8b-4e72-4ebc-988b-e524302c2d6a
+# ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
+# ╠═e7fae12f-3e0b-4e9f-a874-4cb0db599494
+# ╟─bb5b17b7-ad96-4e96-b67c-dc06c1875caf
+# ╠═345182d1-e582-4498-ad3a-daed465891ec
+# ╠═9c2bd780-dca9-4778-8ae3-58003769aefb
+# ╟─d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
+# ╠═d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
+# ╠═4757dd14-b688-49cc-8e73-3878eceff35e
+# ╟─d0b92a37-92ed-4ce4-85cb-beba9eaab65a
+# ╠═8eeb40e8-93cd-410b-b6d7-30fa362dca6e
+# ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
+# ╟─90916ca7-d937-4a85-b40d-a69c23e38562
+# ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
+# ╠═c971b211-e043-47b3-88b7-ad73b6872796
+# ╟─b9c194d6-87fe-459e-82f6-e551d4889747
+# ╟─09771c81-3e9c-42ea-be1a-e389f0bcd906
+# ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
+# ╠═ea18b937-bd81-4517-a04a-ca4987d37319
+# ╠═6dffd504-3993-443b-a5e8-b4ba47b3b107
+# ╠═17d5f78e-7188-4496-b00e-36be135fe37f
+# ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
+# ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
+# ╠═c4f0042e-dac8-4caf-b983-8bc9678b4d1b
+# ╟─c2324815-aa18-43a0-b9f3-cd7dbcde5647
+# ╠═8bc9c3b1-0ffb-451b-bae9-bf3d209355b6
+# ╟─2defcea8-94d2-4182-b313-7b242d185c08
