@@ -18,6 +18,7 @@ begin
     using LinearAlgebra
     using StatsBase
     using HypothesisTests
+    using StatsPlots.PlotMeasures: mm
 end
 
 # ╔═╡ 8a745a37-637c-49e7-9b80-a00e35e2134d
@@ -727,7 +728,7 @@ begin
             
             cell_text = "$rho_val\n$sig"
             text_color = abs(rho_val) < 0.4 ? :black : :white
-            push!(annotations, (i, j, text(cell_text, 6, :center, text_color)))
+            push!(annotations, (i, j, text(cell_text, 10, :center, text_color)))
         end
     end
 end
@@ -753,9 +754,17 @@ begin
         aspect_ratio = :equal,
         lims = :round,
         grid = false,
-        right_margin = 20Plots.mm,
-        left_margin = 20Plots.mm,
-        size = (1000,850)
+        #right_margin = 20Plots.mm,
+        #left_margin = 20Plots.mm,
+        #size = (1000,850)
+        size = (1600, 1600),
+        dpi = 200,
+        titlefontsize = 40,
+        tickfontsize = 24,
+        left_margin = 18mm,
+        bottom_margin = 20mm,
+        top_margin = 10mm,
+        right_margin = 10mm,
     )
 
     grid_range = 0.5:(num_columns + 0.5)
