@@ -1,4 +1,4 @@
-\documentclass[NewProceedings,letterpaper,NoPageNumbers,NoLineNumbers]{ascelike-new}
+\documentclass[Journal,letterpaper,NoPageNumbers,NoLineNumbers]{ascelike-new}
 \WarningFilter{caption}{Unknown document class}
 %% Please choose the appropriate document class option:
 % "Journal" produces double-spaced manuscripts for ASCE journals.
@@ -133,8 +133,6 @@ Based on this visual inspection of the assessed score distribution.  Questions w
 \label{fig:doe_climate_map}
 \end{figure}
 
-\newpage
-
 \subsection{Pre-PCA Data Wrangling}
 
 Before a Principal Component Analysis (PCA) could be performed, the data needed a bit of cleaning.  Table \ref{tab:boiler_descriptive_statistics} shows some basic statistics of the raw dataset. Notice that some columns such as Recency, Climate, and PrevScore have missing values. Additionally, some columns represent non-ordinal identifiers that are not typically useful in PCA and most of the ordinal columns are in mixed types and ranges varying by several orders of magnitude. To address these issues, a number of data wrangling steps are performed:
@@ -195,13 +193,27 @@ PrevScore         & 85.82    & 10    & 100     & 9,334 & 14 \\
 \label{fig:crv_log}
 \end{figure}
 
-\newpage
-
 \subsection{Principal Component Analysis}
 
-With data wrangling steps completed, a PCA is performed using NormlizedAge, EffectiveAge, RSL, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, LogCRV, Year, MonthSin, MonthCos, and Climate columns of the cleaned dataset.  The first step of the PCA includes normalizing and standardizing the dataset (centering on mean, dividing by standard deviation). The SVD is generated and the Figure \ref{fig:pca_init} shows the initial explained variance by principal component. PC 1 has a notable dominance of 34\% of the explained variance. Upon inspection of PC 1, it was observed that all similarly derived lifecycle parameters (NormalizedAge, RSL, PredictedCI, and EffectiveAge) have roughly equal absolute values of ~.49 and seem to be relatively redundant. A new version is run choosing a single one of the lifecycle parameters, RSL is chosen by the rational that it is usually the easiest most people to understand by an interpretability standpoint. The resulting analysis produces a much smoother decline in explained variance across the PCs which can be seen in Figure \ref{fig:pca_reduced}. Of note, another version was run that included all lifecycle parameters divided by 4 to reduce overall influence, however the results were unremarkable and can be seen in Figure \ref{fig:scaled_lifecycle_pca}. All other insights if the PCA will refer to the reduced lifecycle iteration that was performed.
+With data wrangling steps completed, a PCA is performed using NormlizedAge, EffectiveAge, RSL, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, LogCRV, Year, MonthSin, MonthCos, and Climate columns of the cleaned dataset.  The first step of the PCA includes normalizing and standardizing the dataset (centering on mean, dividing by standard deviation). The SVD is generated and the Figure \ref{fig:pca_init} shows the initial explained variance by principal component. PC 1 has a notable dominance of 34\% of the explained variance. Upon inspection of PC 1, it was observed that all similarly derived lifecycle parameters (NormalizedAge, RSL, PredictedCI, and EffectiveAge) have roughly equal absolute values of ~.49 and seem to be relatively redundant. A new version is run choosing a single one of the lifecycle parameters, RSL is chosen by the rational that it is usually the easiest most people to understand by an interpretability standpoint. The resulting analysis produces a much smoother decline in explained variance across the PCs which can be seen in Figure \ref{fig:pca_reduced}. Of note, another version was run that included all lifecycle parameters divided by 4 to reduce overall influence, however the results were unremarkable and can be seen in Figure \ref{fig:scaled_lifecycle_pca}. All other insights of the PCA will refer to the reduced lifecycle iteration that was performed.
 
-The loadings heatmap of the reduced parameter PCA shown in Figure \ref{fig:heatmap_reduced_pca} still shows the expected dominance of RSL in the first PC, but of note is a strong showing for Recency, Climate, and Month in PCs 2 and 3.  To search for potential predictability,  PC scores (Vt' x S) distributions are mapped back to assessed scores and color coded by "Green Region" (score >= 85) and "Not Green Region" (score < 85) and then plotted in histograms for each PC. Figure \ref{fig:score_dist_by_pc_reduced_pca} shows the results and unfortunately, no easily clear distinguishing characteristics jump out from the analysis. PC 1 which is dominated by RSL shows the most promise, but still has heavy overlap. Similar analysis is done for all 81 pairings of PC Scores color coded by region and plotted as scatter plots x vs y; the result was pretty mess of green and orange with no definitive separation of clusters. The resulting mega plot is omitted from this document, but be found in the repository under figures/pc\_vs\_pc\_score\_scatter.png.
+The loadings heatmap of the reduced parameter PCA shown in Figure \ref{fig:heatmap_reduced_pca} still shows the expected dominance of RSL in the first PC, but of note is a strong showing for Recency, Climate, and Month in PCs 2 and 3.  To search for potential predictability,  PC observation models (Vt') values are mapped back to assessed scores and color coded by "Green Region" (score >= 85) and "Not Green Region" (score < 85) and then plotted in histograms for each PC. Figure \ref{fig:score_dist_by_pc_reduced_pca} shows the results and unfortunately, no easily clear distinguishing characteristics jump out from the analysis. PC 1 which is dominated by RSL shows the most promise, but still has heavy overlap. Similar analysis is done for all 81 pairings of PC Scores color coded by region and plotted as scatter plots x vs y; the result was pretty mess of green and orange with no definitive separation of clusters. The resulting mega plot is omitted from this document, but be found in the repository under figures/pc\_vs\_pc\_score\_scatter.png.
+
+Additional analysis was performed that attempted to include Fac and Spec information through hot matrix. With ~134 Fac codes and ~110 Specifications though, the result was not very useful as variance was spread across too many columns. Additional PC1 histograms were produced with various trial and error parameter sets, attempting to further identify combinations that better separated Green and Not Green regions. Through the trials, it seemed that reintroducing PredictedCI (in addition to RSL) helped remove the two-peaked distribution in the Green data and represented more offset picture of two normal distributions. Other combinations of lifecycle parameters were tried with less desirable results. Additionally, better separation was observed when omitting PrevScore and Recency. It appears that PrevAssessed alone produced observably better separation, these three features (similar to the lifecycle parameters) are linked together, though it is curious as to why the simple boolean gave better results.
+
+A new column was also introduced called "PercentGreen".  This was an attempt to bring in some representation of the Fac code into the PCA.  It was produced by grouping the observations by Fac and then getting the percentage of observations of 88 and above for each unique Fac and then assigning that as a new column across all observations.  The thought process here was that it may encode information about the relative importance of a particular facility type (Figure \ref{fig:not_green_fac} shows the variability in Fac codes with more than 20 observations). Some known problems with this approach include the fact that some Fac codes only have 1-2 assessments which may not be a sufficient representation for a meaningful score, and additionally, this could be introducing a source of data leakage in the model by deriving new column using the dependent variable. We used the new column with caution and will verify its legitimacy in project steps when we perform cross-validation of our prediction models.  Of note, however, the data did seem to help provide minor additional separation of regions in our histogram.
+
+The most promising feature combinations are shown in Figures \ref{fig:rsl_no_pgreen}, \ref{fig:rsl_w_pgreen}, \ref{fig:rsl_ci_no_pgreen}, and \ref{fig:rsl_ci_w_pgreen} where we try various combinations of including RSL with PredictedCI and PercentGreen.
+
+Based on this analysis, feature selection for predictive models can begin with the following guidelines:
+
+\begin{itemize}
+    \item Lifecycle parameters limited to RSL and PredictedCI or both.
+    \item Assessment history data limited to simply "PrevAssessed".
+    \item LogCRV, MonthSin, MonthCos, NormalizedAssetAge, and Climate all provide reasonable and roughly equivalent contributions.
+    \item PercentGreen or other Fac/Spec representation can be useful if shown not to cause data leakage or overfitting through cross validation.
+    \item Qty and Year provide negligible influence and can be omitted in favor of model simplification.
+\end{itemize}
 
 \begin{figure}
 \centering
@@ -236,6 +248,41 @@ The loadings heatmap of the reduced parameter PCA shown in Figure \ref{fig:heatm
 \includegraphics[width=1\linewidth]{scaled_lifecycle_pca.png}
 \caption{Scaled Lifecycle PCA}
 \label{fig:scaled_lifecycle_pca}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=1\linewidth]{not_green_fac_hist.png}
+\caption{Percent Not Green by Fac}
+\label{fig:not_green_fac}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=1\linewidth]{RSL_no_PGreen.png}
+\caption{PC1 with RSL, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge}
+\label{fig:rsl_no_pgreen}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=1\linewidth]{RSL_w_PGreen.png}
+\caption{PC1 with RSL, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge, PercentGreen}
+\label{fig:rsl_w_pgreen}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=1\linewidth]{RSL_CI_no_PGreen.png}
+\caption{PC1 with RSL, PredictedCI, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge}
+\label{fig:rsl_ci_no_pgreen}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=1\linewidth]{RSL_CI_w_PGreen.png}
+\caption{PC1 with RSL, PredictedCI, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge, PercentGreen}
+\label{fig:rsl_ci_w_pgreen}
 \end{figure}
 
 \subsection{Additional Data Insights}
