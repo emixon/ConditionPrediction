@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v1.0.3
+# v1.0.4
 
 using Markdown
 using InteractiveUtils
@@ -391,6 +391,11 @@ md"""
 ## Interesting Plot 1
 """
 
+# ╔═╡ 611d8e7c-fdfe-43e8-a12d-647272d2099e
+md"""
+Remaining service life (RSL) and previous assessment scores provide two perspectives on the relationship between asset history and current condition. Green assessments have a substantially higher average RSL (18.61) than not-green assessments (8.76), while their average previous scores are 88.56 and 79.39, respectively. The differences between these distributions indicate that both lifecycle characteristics and previous condition may contain useful information for predicting assessment scores. Although the distributions overlap, the general separation between the groups supports further consideration of these variables in predictive modeling.
+"""
+
 # ╔═╡ e7fae12f-3e0b-4e9f-a874-4cb0db599494
 interesting_plot1 = let
     function compare_histogram(variable, heading)
@@ -426,16 +431,14 @@ interesting_plot1 = let
     )
 end
 
-# ╔═╡ bb5b17b7-ad96-4e96-b67c-dc06c1875caf
-md"""
-## Interesting Plot 1
-
-Remaining service life (`RSL`) and previous assessment score (`PrevScore`) are compared between the green and not-green groups to examine differences in lifecycle characteristics and assessment history. RSL provides a lifecycle measure, while the previous score allows earlier condition to be examined alongside the current classification. Identical bin boundaries and proportions calculated separately within each group support comparison despite unequal sample sizes. A bar height of 0.20 therefore represents 20% of the available observations in that condition group, not 20% of the complete dataset. Differences in concentration, spread, and overlap indicate how the recorded properties distinguish the groups without establishing predictive performance. Missing and nonfinite values are excluded separately for each variable, so the previous-score panel includes only records with a usable previous assessment.
-"""
-
 # ╔═╡ 345182d1-e582-4498-ad3a-daed465891ec
 md"""
 ## Interesting Plot 2
+"""
+
+# ╔═╡ b41a40ab-1eee-4f01-a8f3-a32a249cf6c7
+md"""
+Asset age is another important characteristic when examining differences in component condition. The proportion of not-green assessments generally increases with age, rising from approximately 10.9% for assets younger than 10 to 30.3% for those between 30 and 40, before decreasing to 24.1% for assets aged 40 or older. Although the relationship is not strictly increasing, the results indicate that asset age may help explain variations in assessed condition. The lower proportion among the oldest assets also suggests that age alone is insufficient to describe condition, highlighting the potential importance of other asset characteristics and assessment history.
 """
 
 # ╔═╡ 9c2bd780-dca9-4778-8ae3-58003769aefb
@@ -445,20 +448,18 @@ interesting_plot2 = let
 
     edges = [0, 10, 20, 30, 40, Inf]
     ages = ["0–<10", "10–<20", "20–<30", "30–<40", "40+"]
-    green = Float64[]
-    labels = String[]
 
-    for i in eachindex(ages)
-        scores = d.Score[(d.AssetAge .>= edges[i]) .& (d.AssetAge .< edges[i + 1])]
-        push!(green, isempty(scores) ? NaN : 100 * mean(scores .>= 88))
-        push!(labels, "$(ages[i])\n(n=$(length(scores)))")
-    end
+    groups = [d.Score[(d.AssetAge .>= edges[i]) .&
+                      (d.AssetAge .< edges[i+1])] for i in 1:5]
+
+    green = [isempty(g) ? NaN : 100 * mean(g .>= 88) for g in groups]
     notgreen = 100 .- green
+    labels = ["$(ages[i])\n(n=$(length(groups[i])))" for i in 1:5]
 
-    plot(1:length(ages), [green notgreen];
+    plot(1:5, [green notgreen];
         label=["Green" "Not green"], legend=:outertop, legend_column=2,
         markershape=[:circle :diamond], linestyle=[:solid :dash], linewidth=3,
-        xticks=(1:length(ages), labels), xlims=(0.5, length(ages) + 0.5),
+        xticks=(1:5, labels), xlims=(0.5, 5.5),
         ylims=(-3, 103), yticks=0:20:100,
         title="Green vs Not Green Across Asset-Age Groups",
         xlabel="Asset-Age Group", ylabel="Assessments within age group (%)",
@@ -467,69 +468,57 @@ interesting_plot2 = let
     )
 end
 
-# ╔═╡ d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
-md"""
-## Interesting Plot 2
-
-Green and not-green percentages are compared within five asset-age intervals: 0–<10, 10–<20, 20–<30, 30–<40, and 40+. Unlike Plot 1, which examines variable distributions within condition groups, this figure examines condition proportions within age groups. Each percentage is calculated using the total number of eligible assessments in its age interval, allowing differences in condition status to be distinguished from differences in the number of available records. The two percentages sum to 100% for each interval containing observations, and the sample-size labels provide context for interpreting the comparison. Although the points are connected, they represent separate groups of assessment records rather than deterioration tracked for individual boilers over time. The broad intervals, particularly the open-ended 40+ category, should also be considered when interpreting age-related patterns.
-"""
-
 # ╔═╡ d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
 md"""
 ## Interesting Plot 3
 """
 
+# ╔═╡ e23f9964-af24-45e1-bca5-987438d340b1
+md"""
+Differences in assessed condition are also apparent across climate categories. Climate Codes 4 and 8 have relatively high proportions of not-green assessments, approximately 50.0% and 46.1%, respectively, compared with only 12.4% for Climate Code 7. This variation indicates that climate classification may provide additional information when evaluating component condition. However, nearly half of the observations have missing climate information, and the differences between categories may also reflect variations in asset age, maintenance history, or other characteristics. Further analysis is therefore necessary to determine whether climate contributes independently to condition prediction.
+"""
+
 # ╔═╡ 4757dd14-b688-49cc-8e73-3878eceff35e
-begin
-    climate_codes = sort(unique(string.(coalesce.(comparison_data.Climate, "Unknown"))))
+interesting_plot3 = let
+    d = comparison_data[isfinite.(comparison_data.Score), :]
+    climate = string.(coalesce.(d.Climate, "Unknown"))
+    codes = sort(unique(climate))
 
-    function climate_plot(data, heading)
-        d = data[isfinite.(data.Score), :]
-        climate = string.(coalesce.(d.Climate, "Unknown"))
-        green = Float64[]
-        labels = String[]
+    groups = [d.Score[climate .== c] for c in codes]
+    green = [isempty(g) ? NaN : 100 * mean(g .>= 88) for g in groups]
+    notgreen = 100 .- green
+    labels = ["$(codes[i])\n(n=$(length(groups[i])))" for i in eachindex(codes)]
 
-        for code in climate_codes
-            scores = d.Score[climate .== code]
-            push!(green, isempty(scores) ? NaN : 100 * mean(scores .>= 88))
-            push!(labels, "$code\n(n=$(length(scores)))")
-        end
-        notgreen = 100 .- green
+    p = groupedbar(1:length(codes), [green notgreen];
+        bar_position=:stack, bar_width=0.65, fillalpha=0.6, linewidth=0,
+        label=["Green" "Not green"], legend=:outertop, legend_column=2,
+        xticks=(1:length(codes), labels),
+        xlims=(0.5, length(codes)+0.5),
+        ylims=(0, 110), yticks=0:20:100, ywiden=false,
+        title="Green vs Not Green by Climate",
+        xlabel="Climate Code", ylabel="Assessments (%)",
+        size=(max(1100, 140*length(codes)), 650), grid=false,
+        titlefontsize=13, guidefontsize=12, tickfontsize=11,
+        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
+    )
 
-        p = groupedbar(1:length(climate_codes), [green notgreen];
-            bar_position=:stack, bar_width=0.65, fillalpha=0.6, linewidth=0,
-            label=["Green" "Not green"], legend=:outertop, legend_column=2,
-            xticks=(1:length(climate_codes), labels),
-            xlims=(0.5, length(climate_codes) + 0.5),
-            title=heading, xlabel="Climate Code", ylabel="Assessments (%)",
-            size=(max(1100, 140 * length(climate_codes)), 650), grid=false,
-            titlefontsize=13, guidefontsize=12, tickfontsize=11,
-            margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
-        )
-        plot!(p; ylims=(0, 110), yticks=0:20:100, ywiden=false)
-
-        # Place small-percentage labels above the bar.
-        function add_percentage(i, value, y, group)
-            label = "$(round(value; digits=1))%"
-            if value < 8
-                y = 105
-                label = "$group: $label"
-            end
-            annotate!(p, i, y, text(label, 10))
-        end
-
-        for i in eachindex(green)
-            if isnan(green[i])
-                annotate!(p, i, 50, text("No data", 10))
-            else
-                add_percentage(i, notgreen[i], notgreen[i] / 2, "Not green")
-                add_percentage(i, green[i], notgreen[i] + green[i] / 2, "Green")
+    # Display percentages inside or above bars.
+    for i in eachindex(green)
+        if isnan(green[i])
+            annotate!(p, i, 50, text("No data", 10))
+        else
+            for (value, y, group) in (
+                (notgreen[i], notgreen[i]/2, "Not green"),
+                (green[i], notgreen[i]+green[i]/2, "Green")
+            )
+                label = value < 8 ? "$group: $(round(value; digits=1))%" :
+                                    "$(round(value; digits=1))%"
+                annotate!(p, i, value < 8 ? 105 : y, text(label, 10))
             end
         end
-        p
     end
 
-    interesting_plot3 = climate_plot(comparison_data, "Green vs Not Green by Climate")
+    p
 end
 
 # ╔═╡ d0b92a37-92ed-4ce4-85cb-beba9eaab65a
@@ -537,24 +526,156 @@ md"""
 ## Interesting Plot 4
 """
 
+# ╔═╡ 50a8cd94-bf14-44b8-b170-319fe9b97b16
+md"""
+The climate comparison is extended by grouping assessments into winter, spring, summer, and fall to examine potential seasonal patterns in recorded condition. For Climate Code 5, the proportion of not-green assessments increases from approximately 10.8% during summer to 24.0% during fall, indicating differences in condition distributions between assessment periods. Similar comparisons across the remaining climate categories provide a broader perspective on how condition status varies throughout the year. Groups containing fewer than 50 observations are identified separately to avoid overinterpreting limited data. These seasonal differences may also reflect assessment timing and asset characteristics rather than direct environmental effects.
+"""
+
 # ╔═╡ 8eeb40e8-93cd-410b-b6d7-30fa362dca6e
 interesting_plot4 = let
-    d = dropmissing(comparison_data, :AssetAge)
-    d = d[isfinite.(d.AssetAge), :]
+    d = dropmissing(comparison_data, [:Month, :Climate])
+    d = d[isfinite.(d.Score) .& isfinite.(d.Month) .&
+          isfinite.(d.Climate) .& (d.Month .>= 1) .&
+          (d.Month .<= 12) .& (d.Month .== round.(d.Month)), :]
 
-    function age_plot(low, high, heading)
-        rows = (d.AssetAge .>= low) .& (d.AssetAge .< high)
-        climate_plot(d[rows, :], "Asset Age: $heading")
+    nrow(d) > 0 || error("No valid seasonal observations.")
+
+    season_map = ["Winter", "Winter", "Spring", "Spring", "Spring",
+                  "Summer", "Summer", "Summer", "Fall", "Fall", "Fall", "Winter"]
+
+    d.Season = season_map[Int.(d.Month)]
+    codes = sort(unique(d.Climate))
+
+    function season_plot(season)
+        groups = [d.Score[(d.Climate .== c) .& (d.Season .== season)] for c in codes]
+        counts = length.(groups)
+        rates = [counts[i] < 50 ? NaN : 100 * mean(groups[i] .< 88)
+                 for i in eachindex(codes)]
+
+        labels = ["$(Int(codes[i]))\n(n=$(counts[i]))" for i in eachindex(codes)]
+
+        p = bar(1:length(codes), rates;
+            label="", color=:steelblue, bar_width=0.65,
+            xticks=(1:length(codes), labels),
+            xlims=(0.5, length(codes)+0.5),
+            ylims=(0, 110), yticks=0:20:100, ywiden=false,
+            xlabel="Climate Code", ylabel="Not Green (%)",
+            title=season, grid=false,
+        )
+
+        for i in eachindex(codes)
+            label = counts[i] < 50 ? "Low n" : "$(round(rates[i]; digits=1))%"
+            y = counts[i] < 50 ? 8 : rates[i] + 4
+            annotate!(p, i, y, text(label, 9))
+        end
+
+        p
     end
 
-    plot(
-        age_plot(0, 10, "0–<10"), age_plot(10, 20, "10–<20"),
-        age_plot(20, 30, "20–<30"), age_plot(30, 40, "30–<40"),
-        age_plot(40, Inf, "40+");
-        layout=(5, 1), size=(max(1100, 140 * length(climate_codes)), 2700),
-        ylims=(0, 110), yticks=0:20:100, ywiden=false,
-        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
+    plots = [season_plot(s) for s in ["Winter", "Spring", "Summer", "Fall"]]
+
+    plot(plots...;
+        layout=(2, 2), size=(1300, 950),
+        titlefontsize=13, guidefontsize=11, tickfontsize=10,
+        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=12Plots.mm,
     )
+end
+
+# ╔═╡ aa888638-4879-40f8-b7be-9b7d961d0f21
+md"""
+## Interesting Plot 5
+"""
+
+# ╔═╡ 59fb2405-2cbe-4979-beb7-cbf24b907687
+md"""
+The seasonal and climate comparisons are further summarized using a heatmap, allowing differences in not-green assessment percentages to be examined across both variables simultaneously. The visualization highlights combinations of climate category and assessment season with relatively high or low proportions of not-green observations, providing a more consolidated view of the patterns examined in the preceding analysis. Differences across these combinations suggest that condition status may reflect several interacting characteristics rather than a single factor. However, groups with limited observations require cautious interpretation, particularly where relatively large percentages are based on small sample sizes.
+"""
+
+# ╔═╡ 8cb1f1b2-e752-4110-8ed9-17c5b0eefdf2
+interesting_plot5 = let
+    d = dropmissing(comparison_data, [:Month, :Climate])
+    d = d[isfinite.(d.Score) .& isfinite.(d.Month) .&
+          (d.Month .>= 1) .& (d.Month .<= 12) .&
+          (d.Month .== round.(d.Month)), :]
+
+    nrow(d) > 0 || error("No valid seasonal observations.")
+
+    season_map = ["Winter", "Winter", "Spring", "Spring", "Spring",
+                  "Summer", "Summer", "Summer", "Fall", "Fall", "Fall", "Winter"]
+
+    seasons = ["Winter", "Spring", "Summer", "Fall"]
+    d.Season = season_map[Int.(d.Month)]
+    climate = string.(d.Climate)
+    codes = sort(unique(climate))
+
+    groups = [d.Score[(climate .== codes[i]) .& (d.Season .== seasons[j])]
+              for i in eachindex(codes), j in 1:4]
+
+    counts = length.(groups)
+    rates = [isempty(g) ? NaN : 100 * mean(g .< 88) for g in groups]
+
+    p = heatmap(1:4, 1:length(codes), rates;
+        xticks=(1:4, seasons), yticks=(1:length(codes), codes),
+        xlabel="Assessment Season", ylabel="Climate Code",
+        title="Not-Green Assessments by Season and Climate",
+        color=:viridis, clims=(0, 100), colorbar_title="Not green (%)",
+        yflip=true, size=(1000, max(500, 65*length(codes))),
+        left_margin=12Plots.mm, bottom_margin=10Plots.mm,
+    )
+
+    for i in eachindex(codes), j in 1:4
+        n = counts[i, j]
+        label = n == 0 ? "No data" : "$(round(rates[i, j]; digits=1))%\n(n=$n)"
+        color = n > 0 && rates[i, j] < 45 ? :white : :black
+        annotate!(p, j, i, text(label, 9, color))
+    end
+
+    p
+end
+
+# ╔═╡ aa974399-dc5f-4858-97e1-d15dc3f44ce8
+md"""
+## Interesting Plot 6
+"""
+
+# ╔═╡ 986775ce-5341-4597-9c3d-20fe0f785b58
+md"""
+Prediction performance is examined across asset-age groups to determine whether the agreement between predicted condition indices (PredictedCI) and recorded assessment scores varies with age. Mean absolute error increases from approximately 6.76 points for assets younger than 10 to 18.21 points for assets between 20 and 30, indicating that prediction accuracy is not uniform across age groups. Mean bias provides additional insight into whether condition is systematically overestimated or underestimated. These findings highlight potential limitations of the existing condition estimates and suggest that accounting for differences in asset characteristics may be important for improving future predictive models.
+"""
+
+# ╔═╡ d4398bfd-0fa9-496e-a5a3-8b9f459927ff
+interesting_plot6 = let
+    d = dropmissing(comparison_data, [:AssetAge, :PredictedCI])
+    d = d[isfinite.(d.Score) .& isfinite.(d.AssetAge) .&
+          isfinite.(d.PredictedCI) .& (d.AssetAge .>= 0), :]
+
+    nrow(d) > 0 || error("No valid prediction records.")
+
+    edges = [0, 10, 20, 30, 40, Inf]
+    ages = ["0–<10", "10–<20", "20–<30", "30–<40", "40+"]
+    residual = d.Score .- d.PredictedCI
+
+    groups = [residual[(d.AssetAge .>= edges[i]) .&
+                       (d.AssetAge .< edges[i+1])] for i in 1:5]
+
+    mae = [isempty(g) ? NaN : mean(abs.(g)) for g in groups]
+    bias = [isempty(g) ? NaN : mean(g) for g in groups]
+    labels = ["$(ages[i])\n(n=$(length(groups[i])))" for i in 1:5]
+
+    p = plot(1:5, [mae bias];
+        label=["Mean Absolute Error" "Mean Bias (Score - PredictedCI)"],
+        markershape=[:circle :diamond], linestyle=[:solid :dash],
+        linewidth=3, markersize=7,
+        xticks=(1:5, labels), xlims=(0.5, 5.5),
+        xlabel="Asset-Age Group", ylabel="Error (Score Points)",
+        title="Prediction Error by Asset Age",
+        legend=:outertop, legend_column=2,
+        size=(1050, 580),
+        left_margin=12Plots.mm, bottom_margin=14Plots.mm,
+    )
+
+    hline!(p, [0]; linestyle=:dot, label="")
+    p
 end
 
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
@@ -743,15 +864,23 @@ md"""
 # ╠═12b33241-044c-4631-a9b9-e9c44e24847a
 # ╟─0263eb8b-4e72-4ebc-988b-e524302c2d6a
 # ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
-# ╠═e7fae12f-3e0b-4e9f-a874-4cb0db599494
-# ╟─bb5b17b7-ad96-4e96-b67c-dc06c1875caf
-# ╠═345182d1-e582-4498-ad3a-daed465891ec
-# ╠═9c2bd780-dca9-4778-8ae3-58003769aefb
-# ╟─d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
-# ╠═d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
-# ╠═4757dd14-b688-49cc-8e73-3878eceff35e
+# ╟─611d8e7c-fdfe-43e8-a12d-647272d2099e
+# ╟─e7fae12f-3e0b-4e9f-a874-4cb0db599494
+# ╟─345182d1-e582-4498-ad3a-daed465891ec
+# ╟─b41a40ab-1eee-4f01-a8f3-a32a249cf6c7
+# ╟─9c2bd780-dca9-4778-8ae3-58003769aefb
+# ╟─d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
+# ╟─e23f9964-af24-45e1-bca5-987438d340b1
+# ╟─4757dd14-b688-49cc-8e73-3878eceff35e
 # ╟─d0b92a37-92ed-4ce4-85cb-beba9eaab65a
-# ╠═8eeb40e8-93cd-410b-b6d7-30fa362dca6e
+# ╟─50a8cd94-bf14-44b8-b170-319fe9b97b16
+# ╟─8eeb40e8-93cd-410b-b6d7-30fa362dca6e
+# ╟─aa888638-4879-40f8-b7be-9b7d961d0f21
+# ╟─59fb2405-2cbe-4979-beb7-cbf24b907687
+# ╟─8cb1f1b2-e752-4110-8ed9-17c5b0eefdf2
+# ╟─aa974399-dc5f-4858-97e1-d15dc3f44ce8
+# ╟─986775ce-5341-4597-9c3d-20fe0f785b58
+# ╟─d4398bfd-0fa9-496e-a5a3-8b9f459927ff
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
