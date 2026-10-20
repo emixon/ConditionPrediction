@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v1.0.3
+# v1.0.4
 
 using Markdown
 using InteractiveUtils
@@ -679,6 +679,31 @@ interesting_plot6 = let
     p
 end
 
+# ╔═╡ 00156390-9033-438e-ab74-b9393ef9b1cf
+let
+    project_dir = normpath(joinpath(@__DIR__, ".."))
+
+    # Locate exploratory.tex in the project.
+    texfiles = [joinpath(dir, "exploratory.tex")
+                for (dir, _, files) in walkdir(project_dir)
+                if "exploratory.tex" in files]
+
+    length(texfiles) == 1 || error("Could not locate one exploratory.tex.")
+
+    # Save images where the report expects them.
+    figdir = normpath(joinpath(dirname(only(texfiles)), "..", "figures"))
+    mkpath(figdir)
+
+    figures = (interesting_plot1, interesting_plot2, interesting_plot3,
+               interesting_plot4, interesting_plot5, interesting_plot6)
+
+    for (i, fig) in enumerate(figures)
+        savefig(fig, joinpath(figdir, "interesting_plot$(i).png"))
+    end
+
+    "Saved 6 figures to: $figdir"
+end
+
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 md"""
 ## Regression Analysis
@@ -882,6 +907,7 @@ md"""
 # ╟─aa974399-dc5f-4858-97e1-d15dc3f44ce8
 # ╟─986775ce-5341-4597-9c3d-20fe0f785b58
 # ╟─d4398bfd-0fa9-496e-a5a3-8b9f459927ff
+# ╠═00156390-9033-438e-ab74-b9393ef9b1cf
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
