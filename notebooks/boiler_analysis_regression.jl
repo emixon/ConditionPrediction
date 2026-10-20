@@ -17,13 +17,7 @@ begin
     using Statistics
     using LinearAlgebra
     using StatsBase
-end
-
-# ╔═╡ ea18b937-bd81-4517-a04a-ca4987d37319
-begin
-	Pkg.add(["HypothesisTests"])
-	
-	using HypothesisTests
+    using HypothesisTests
 end
 
 # ╔═╡ 8a745a37-637c-49e7-9b80-a00e35e2134d
@@ -559,12 +553,17 @@ end
 
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 md"""
-## Regression Analysis
+## Pairwise Correlation Analysis
 """
 
 # ╔═╡ 90916ca7-d937-4a85-b40d-a69c23e38562
 md"""
 ### Pearson Correlation Analysis
+"""
+
+# ╔═╡ acde71bb-e5e0-4ff2-b655-ffcb1d9c74fd
+md"""
+The Pearson correlation coefficient is the measure of the direction and strength of the linear relationship between two variables.
 """
 
 # ╔═╡ d832c11a-a8b3-4f92-9a30-caccc1d6b28e
@@ -646,22 +645,10 @@ begin
     spearman_matrix = corspearman(boilers_cor)
 end
 
-# ╔═╡ 6dffd504-3993-443b-a5e8-b4ba47b3b107
+# ╔═╡ 3f0bb0f0-29ae-4e19-a6c1-dbb881074367
 begin
-	# statistical significance
-	x = [1, 2, 3, 4, 5]
-	y = [5, 6, 7, 8, 7]
-	test_result = CorrelationTest(x, y_vec, method=:spearman)
-	println(test_result)
-end
-
-# ╔═╡ 17d5f78e-7188-4496-b00e-36be135fe37f
-begin
-	# CREATE SPEARMAN HEATMAP
-
-	# create data labels
-	
-	spearman_labels = [
+    # create data labels	
+    spearman_labels = [
 		"NormalizedAge",
         "EffectiveAge",
         "RSL",
@@ -678,13 +665,103 @@ begin
         "Year",
         "Climate"
 	]
+    
+    # matrix dimensions
+   num_rows, num_columns = size(boilers_cor)
 
-	# create mask to hide redundant values
-	spearman_matrix_masked = copy(spearman_matrix)
-	spearman_matrix_masked[triu!(trues(size(spearman_matrix_masked)), 1)] .= NaN
-	
-	# plot heatmap
-	heatmap(spearman_labels, spearman_labels, spearman_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, title = "Spearman Correlation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
+     #get ranked data
+    boilers_ranked = zeros(num_rows, num_columns)
+    for col in 1:num_columns
+        boilers_ranked[:, col] = tiedrank(boilers_cor[:,col])
+    end
+
+    # empty matrices for output
+    rho_matrix = zeros(num_columns, num_columns)
+    p_matrix = zeros(num_columns, num_columns)
+
+    # get Spearman correlation coefficients and p-values
+    for i in 1:num_columns
+        for j in 1:num_columns
+            if i == j
+                rho_matrix[i,j] = 1.0
+                p_matrix[i, j] = 0.0
+            elseif i<j
+                # Spearman correlation test
+                test_result = CorrelationTest(boilers_ranked[:,i], boilers_ranked[:,j])
+
+                # correlation coefficient and p-value
+                rho_matrix[i,j] = test_result.r
+                p_matrix[i,j] = pvalue(test_result)
+
+                # mirror results
+                rho_matrix[j,i] = rho_matrix[i,j]
+                p_matrix[j,i] = p_matrix[i,j]
+            end
+        end
+    end
+
+    # create mask to hide redundant values
+	rho_matrix_masked = copy(rho_matrix)
+	rho_matrix_masked[triu!(trues(size(rho_matrix_masked)), 1)] .= NaN
+
+    # get annotations for each cell
+    num_rows, num_columns = size(boilers_cor)
+    annotations = []
+    for i in 1:num_columns
+        for j in 1:num_columns
+
+            if j < i
+                continue
+            end
+            rho_val = round(rho_matrix[i, j], digits=2)
+            p_val = p_matrix[i,j]
+            sig = if p_val < 0.001
+                "***"
+            elseif p_val < 0.01
+                "**"
+            elseif p_val < 0.05
+                "*"
+            else
+                ""
+            end
+            
+            cell_text = "$rho_val\n$sig"
+            text_color = abs(rho_val) < 0.4 ? :black : :white
+            push!(annotations, (i, j, text(cell_text, 6, :center, text_color)))
+        end
+    end
+end
+
+
+            
+
+# ╔═╡ 5eb540bd-b9b8-4a0f-a902-91199da3bee5
+begin
+# plot heatmap
+	plt = heatmap(
+        1:num_columns,
+        1:num_columns,
+        rho_matrix_masked,
+        xticks = (1:num_columns, spearman_labels), 
+        yticks = (1:num_columns, spearman_labels), 
+        xrotation = 45,
+        clim = (-1,1),
+        c = :bwr, 
+        title = "Spearman Correlation Heatmap",
+        yflip = true,
+        annotate = annotations,
+        aspect_ratio = :equal,
+        lims = :round,
+        grid = false,
+        right_margin = 20Plots.mm,
+        left_margin = 20Plots.mm,
+        size = (1000,850)
+    )
+
+    grid_range = 0.5:(num_columns + 0.5)
+    vline!(plt, grid_range, color = :gray, alpha = 0.6, linewidth = 0.5, label = false)
+    hline!(plt, grid_range, color = :gray, alpha = 0.6, linewidth = 0.5, label = false)
+    plot!(plt, framestyle = :box)
 end
 
 # ╔═╡ cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
@@ -754,14 +831,14 @@ md"""
 # ╠═8eeb40e8-93cd-410b-b6d7-30fa362dca6e
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
+# ╟─acde71bb-e5e0-4ff2-b655-ffcb1d9c74fd
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
 # ╠═c971b211-e043-47b3-88b7-ad73b6872796
 # ╟─b9c194d6-87fe-459e-82f6-e551d4889747
 # ╟─09771c81-3e9c-42ea-be1a-e389f0bcd906
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
-# ╠═ea18b937-bd81-4517-a04a-ca4987d37319
-# ╠═6dffd504-3993-443b-a5e8-b4ba47b3b107
-# ╠═17d5f78e-7188-4496-b00e-36be135fe37f
+# ╠═3f0bb0f0-29ae-4e19-a6c1-dbb881074367
+# ╠═5eb540bd-b9b8-4a0f-a902-91199da3bee5
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
 # ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
 # ╠═c4f0042e-dac8-4caf-b983-8bc9678b4d1b
