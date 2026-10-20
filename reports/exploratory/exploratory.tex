@@ -285,11 +285,24 @@ Based on this analysis, feature selection for predictive models can begin with t
 \label{fig:rsl_ci_w_pgreen}
 \end{figure}
 
+
 \subsection{Additional Data Insights}
 % Julian
 
-\subsection{Regression Analysis}
-% Juliana
+\subsection{Pairwise Correlation Analysis}
+In addition to the PCA analysis, a pairwise correlation analysis was completed to understand relationships among the variables. To this end, Spearman's rank correlation coefficient ($\rho$), which is a nonparametric measure of the strength and direction of the monotonic relationship between two variables, was calculated for each combination of pairs among the following set of variables from the cleaned data: NormalizedAge, EffectiveAge, RSL, Recency, PrevScore, PrevAssessed, PredictedCI, Score, Qty, AssetAge, AssetDesignLife, LogCRV, Month, Year, and Climate. \ref{fig:spearman_heatmap_with_sig}  visualizes the results of this analysis as a heatmap of correlation coefficients. Positive correlation coefficients, shown as red squares in the heatmap, indicate a positive monotonic relationship, while negative correlation coefficients, shown as blue squares in the heatmap, represent a negative monotonic relationship. Asterisks are used to denote the statistical significance of the correlation between variable pairs, with * signifying $p < 0.05$, ** signifying $p < 0.01$, and *** signifying $p < 0.001$.
+
+\ref{fig:spearman_heatmap_with_sig} shows the strongest pairwise correlations between PredictedCI and NormalizedAge, EffectiveAge, and RSL, as well as between RSL and NormalizedAge. The calculated coefficients for these relationships were -0.88, -0.81, 0.91, and -0.90, respectively, all with statistical significance at p < 0.001. However, these relationships are not expected and are largely explained by the characteristics of the dataset. For example, NormalizedAge is an input to the equation used to calculate PredictedCI, and EffectiveAge is used to calculate RSL.
+
+In contrast, the relative strength of pairwise correlations with the Score variable, which represents an Expert assessor's assigned condition rating of a given boiler, are lower. For example, the correlation coefficients with the largest magnitude are those with RSL, NormalizedAge, and PredictedCI, but their values are only 0.54, -0.53, and 0.50, respectively, each with statistical significance at p < 0.001. These results indicate that Score cannot be predicted by a single correlation with another variable, and that a multivariate approach is needed to understand the complex relationships influencing Score.
+
+\begin{figure}
+\centering
+\includegraphics[width=1\linewidth]{spearman_heatmap_with_sig.png}
+\caption{Spearman's rank correlation coefficients among variable pairs in the boiler dataset.}
+\label{fig:spearman_heatmap_with_sig}
+\end{figure}
+
 
 \newpage
 
