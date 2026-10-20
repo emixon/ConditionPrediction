@@ -618,16 +618,17 @@ interesting_plot5 = let
         xticks=(1:4, seasons), yticks=(1:length(codes), codes),
         xlabel="Assessment Season", ylabel="Climate Code",
         title="Not-Green Assessments by Season and Climate",
-        color=:viridis, clims=(0, 100), colorbar_title="Not green (%)",
-        yflip=true, size=(1000, max(500, 65*length(codes))),
+        color=cgrad([:royalblue, :lightskyblue, :moccasin, :darkorange]),
+        clims=(0, 100), colorbar_title="Not green (%)",
+        yflip=true, size=(1000, max(500, 65 * length(codes))),
         left_margin=12Plots.mm, bottom_margin=10Plots.mm,
     )
 
     for i in eachindex(codes), j in 1:4
         n = counts[i, j]
         label = n == 0 ? "No data" : "$(round(rates[i, j]; digits=1))%\n(n=$n)"
-        color = n > 0 && rates[i, j] < 45 ? :white : :black
-        annotate!(p, j, i, text(label, 9, color))
+        text_color = n > 0 && (rates[i, j] < 30 || rates[i, j] > 75) ? :white : :black
+        annotate!(p, j, i, text(label, 9, text_color))
     end
 
     p
