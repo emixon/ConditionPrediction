@@ -206,7 +206,7 @@ Additionally, based on this visual inspection of the assessed score distribution
 \FloatBarrier
 
 \subsection{Pairwise Correlation Analysis}
-Next, a pairwise correlation analysis was completed to understand relationships among the features in the raw dataset. To this end, Spearman's rank correlation coefficient ($\rho$), which is a nonparametric measure of the strength and direction of the monotonic relationship between two variables \cite{scipy_spearmanr,uva_correlation}, was calculated for each combination of pairs among the following set of fifteen features from the raw dataset: NormalizedAge, EffectiveAge, RSL, Recency, PrevScore, PrevAssessed, PredictedCI, Score, Qty, AssetAge, AssetDesignLife, LogCRV, Month, Year, and Climate. Figure \ref{fig:spearman_heatmap_with_sig}  visualizes the results of this analysis as a heatmap of correlation coefficients. Positive correlation coefficients, shown as red squares in the heatmap, indicate a positive monotonic relationship, while negative correlation coefficients, shown as blue squares in the heatmap, represent a negative monotonic relationship. Asterisks are used to denote the statistical significance of the correlation between variable pairs, with * signifying $p < 0.05$, ** signifying $p < 0.01$, and *** signifying $p < 0.001$.
+Next, a pairwise correlation analysis was completed to understand relationships among the features in the raw dataset. To this end, Spearman's rank correlation coefficient ($\rho$), which is a nonparametric measure of the strength and direction of the monotonic relationship between two variables \cite{scipy_spearmanr} \cite{uva_correlation}, was calculated for each combination of pairs among the following set of fifteen features from the raw dataset: NormalizedAge, EffectiveAge, RSL, Recency, PrevScore, PrevAssessed, PredictedCI, Score, Qty, AssetAge, AssetDesignLife, LogCRV, Month, Year, and Climate. Figure \ref{fig:spearman_heatmap_with_sig}  visualizes the results of this analysis as a heatmap of correlation coefficients. Positive correlation coefficients, shown as red squares in the heatmap, indicate a positive monotonic relationship, while negative correlation coefficients, shown as blue squares in the heatmap, represent a negative monotonic relationship. Asterisks are used to denote the statistical significance of the correlation between variable pairs, with * signifying $p < 0.05$, ** signifying $p < 0.01$, and *** signifying $p < 0.001$.
 
 Figure \ref{fig:spearman_heatmap_with_sig} shows the strongest pairwise correlations between PredictedCI and NormalizedAge, EffectiveAge, and RSL, as well as between RSL and NormalizedAge. The calculated coefficients for these relationships were -0.88, -0.81, 0.91, and -0.90, respectively, all with statistical significance at p < 0.001. However, these relationships are expected based on the characteristics of the dataset. For example, NormalizedAge is an input to the equation used to calculate PredictedCI, and EffectiveAge is used to calculate RSL. These correlations among dependent variables will need to be mitigated during the development of predictive models in order to prevent confounding.
 
@@ -410,7 +410,7 @@ Based on this analysis, future feature selection for predictive models can begin
 
 \begin{figure}
 \centering
-\includegraphics[width=.8\linewidth]{pc_vs_score_hists.png}f
+\includegraphics[width=.8\linewidth]{pc_vs_score_hists.png}
 \caption{Score Distributions by PC for Reduced Parameter PCA}
 \label{fig:score_dist_by_pc_reduced_pca}
 \end{figure}
@@ -478,6 +478,6 @@ The relevant types of machine learning models that will be tested and cross vali
 \newpage
 
 \label{section:references}
-\bibliography{./references.bib}
+\bibliography{./references}
 %
 \end{document}
