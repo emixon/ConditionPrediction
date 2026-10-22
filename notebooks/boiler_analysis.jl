@@ -695,7 +695,7 @@ md"""
 
 # ╔═╡ 986775ce-5341-4597-9c3d-20fe0f785b58
 md"""
-Assessment recency provides another perspective on the relationship between assessment history and current boiler condition. The proportion of not-green assessments is compared across different time intervals since the previous assessment, including boilers with no recorded assessment history. Differences in these proportions may indicate that the time elapsed between assessments contains useful information for understanding variations in boiler condition. Comparing each group with the overall not-green percentage also helps identify whether certain reassessment intervals are associated with relatively poorer condition.
+Assessment recency provides another perspective on the relationship between assessment history and current boiler condition. The proportion of not-green assessments is compared across different time intervals since the previous assessment, including boilers with no recorded assessment history. Differences in these proportions may indicate that the time elapsed between assessments contains useful information for understanding variations in boiler condition.
 """
 
 # ╔═╡ 00156390-9033-438e-ab74-b9393ef9b1cf
@@ -986,8 +986,8 @@ md"""
 # ╟─59fb2405-2cbe-4979-beb7-cbf24b907687
 # ╟─8cb1f1b2-e752-4110-8ed9-17c5b0eefdf2
 # ╟─aa974399-dc5f-4858-97e1-d15dc3f44ce8
-# ╟─986775ce-5341-4597-9c3d-20fe0f785b58
-# ╠═00156390-9033-438e-ab74-b9393ef9b1cf
+# ╠═986775ce-5341-4597-9c3d-20fe0f785b58
+# ╟─00156390-9033-438e-ab74-b9393ef9b1cf
 # ╠═023a5858-1710-4ae0-8b81-939a679b4014
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
