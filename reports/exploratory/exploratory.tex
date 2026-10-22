@@ -203,6 +203,8 @@ Additionally, based on this visual inspection of the assessed score distribution
 \label{fig:doe_climate_map}
 \end{figure}
 
+\FloatBarrier
+
 \subsection{Pairwise Correlation Analysis}
 Next, a pairwise correlation analysis was completed to understand relationships among the features in the raw dataset. To this end, Spearman's rank correlation coefficient ($\rho$), which is a nonparametric measure of the strength and direction of the monotonic relationship between two variables \cite{scipy_spearmanr,uva_correlation}, was calculated for each combination of pairs among the following set of fifteen features from the raw dataset: NormalizedAge, EffectiveAge, RSL, Recency, PrevScore, PrevAssessed, PredictedCI, Score, Qty, AssetAge, AssetDesignLife, LogCRV, Month, Year, and Climate. Figure \ref{fig:spearman_heatmap_with_sig}  visualizes the results of this analysis as a heatmap of correlation coefficients. Positive correlation coefficients, shown as red squares in the heatmap, indicate a positive monotonic relationship, while negative correlation coefficients, shown as blue squares in the heatmap, represent a negative monotonic relationship. Asterisks are used to denote the statistical significance of the correlation between variable pairs, with * signifying $p < 0.05$, ** signifying $p < 0.01$, and *** signifying $p < 0.001$.
 
@@ -214,17 +216,19 @@ As another way of visualizing these correlations among variables, a correlation 
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{spearman_heatmap_with_sig.png}
+\includegraphics[width=.8\linewidth]{spearman_heatmap_with_sig.png}
 \caption{Spearman's rank correlation coefficients among variable pairs in the boiler dataset.}
 \label{fig:spearman_heatmap_with_sig}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{boiler_corr_plot.png}
+\includegraphics[width=.8\linewidth]{boiler_corr_plot.png}
 \caption{Thumbnail of the correlation plot for the raw boiler dataset. The full plot can be viewed in the GitHub repository under figures/boiler\_corr\_plot.png.}
 \label{fig:boiler_corr_plot}
 \end{figure}
+
+\FloatBarrier
 
 \subsection{Data Wrangling}
 
@@ -281,7 +285,7 @@ PrevScore         & 85.82    & 10    & 100     & 9,334 & 14 \\
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{log_crv_scatter.png}
+\includegraphics[width=.8\linewidth]{log_crv_scatter.png}
 \caption{Conversion of CRV to LogCRV}
 \label{fig:crv_log}
 \end{figure}
@@ -362,6 +366,22 @@ Prediction performance is examined across asset-age groups to determine whether 
 
 Assessment recency provides another perspective on the relationship between assessment history and current boiler condition. Figure~\ref{fig:julian_plot6} compares the proportion of not-green assessments across different intervals since the previous assessment, including records without a prior assessment. Differences among these groups suggest that assessment recency may provide useful information for understanding variations in condition status and informing future reassessment strategies. The overall not-green percentage serves as a reference for identifying intervals associated with relatively higher or lower proportions of poor condition. However, these differences may also reflect asset characteristics and assessment practices rather than deterioration caused by elapsed time.
 
+\FloatBarrier
+
+\subsection{Principal Component Analysis}
+
+After data wrangling, a PCA was performed using the following columns of the cleaned dataset: NormlizedAge, EffectiveAge, RSL, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, LogCRV, Year, MonthSin, MonthCos, and Climate.  First, data were normalized and standardized (by centering on the mean, then dividing by standard deviation). Then, the singular value decomposiion SVD was generated. Figure \ref{fig:pca_init} shows the initial explained variance by principal component. Principal component (PC) 1 has a notable dominance of 34\% of the explained variance. Upon inspection of PC 1, all similarly derived lifecycle parameters (NormalizedAge, RSL, PredictedCI, and EffectiveAge) have roughly equal absolute values of ~.49 and are therefore relatively redundant. A new version of the PCA was then run using a single lifecycle parameter, RSL. RSL was selected because it is an intuitively interpretable value. The resulting PCA produced a smoother decline in explained variance across the PCs, which can be seen in Figure \ref{fig:pca_reduced}. Of note, a third PCA version was run that included all lifecycle parameters divided by 4 to reduce overall influence, but the results were unremarkable (refer to Figure \ref{fig:scaled_lifecycle_pca}). Therefore, further discussion of the PCA will refer to the reduced lifecycle version that was performed using RSL as the representative parameter.
+
+The loadings heatmap of the reduced-parameter PCA (Figure \ref{fig:heatmap_reduced_pca}) still shows the expected dominance of RSL in the first PC, but Recency, Climate, and Month are also key to PCs 2 and 3. To search for potential predictability, PC observation models (Vt') values were mapped back to assessed scores, color coded by "Green Region" (score >= 85) and "Not Green Region" (score < 85) and then plotted in histograms for each PC. Figure \ref{fig:score_dist_by_pc_reduced_pca} shows the results. Unfortunately, the analysis resulted in no clear distinguishing characteristics. PC 1, dominated by RSL, shows the most promise, but still has heavy overlap. Similar analysis was done for all 81 pairings of PC Scores, color coding by region and plotting as scatter plots. No definitive separation of clusters was apparent. The resulting mega plot is omitted from this document, but be found in the repository under figures/pc\_vs\_pc\_score\_scatter.png.
+
+Additional analysis was performed that attempted to include Facility (Fac) and Specification (Spec) information through hot matrix. With ~134 Fac codes and ~110 Specifications though, variance was spread across too many columns. Additional PC 1 histograms were produced with various trial and error parameter sets, attempting to further identify combinations that better separated Green and Not Green regions. Through the trials, it seemed that reintroducing PredictedCI (in addition to RSL) helped remove the two-peaked distribution in the Green data and represented more offset picture of two normal distributions. Other combinations of lifecycle parameters were tried with less desirable results. Additionally, better separation was observed when omitting PrevScore and Recency. It appears that PrevAssessed alone produced observably better separation. PrevScore, Recency, and PrevAssessed are linked, similar to the lifecycle parameters, although it is unclear as to why the simple boolean of PrevAssesed produced better separation between clusters.
+
+A new column was also introduced called "PercentGreen", as a way of representing Facility (Fac) code in the PCA.  It was produced by grouping the observations by Fac and then calculating the percentage of observations greater than or equal to 88 for each unique Fac. The result was then assigned as a new column across all observations. The rationale was that the Fac code may help to uderstand the relative importance of a particular facility type (Figure \ref{fig:not_green_fac} shows the variability in Fac codes with more than 20 observations). However, limitations to this approach include the fact that some Fac codes only have 1-2 assessments, which may not be a sufficient representation for a meaningful score, and additionally, the new column could be introducing a source of data leakage in the model since it derived using the dependent variable. Therefore, we used the new column with caution, and will verify its legitimacy in future project steps when we perform cross-validation of our prediction models. Of note, however, the new column did provide minor additional separation of regions in our histogram.
+
+The most promising feature combinations are shown in Figures \ref{fig:rsl_no_pgreen}, \ref{fig:rsl_w_pgreen}, \ref{fig:rsl_ci_no_pgreen}, and \ref{fig:rsl_ci_w_pgreen}, where we test various feature combinations including RSL, PredictedCI, and PercentGreen.
+
+Based on this analysis, future feature selection for predictive models can begin with the following guidelines:
+
 \begin{itemize}
     \item Lifecycle parameters limited to RSL and PredictedCI or both.
     \item Assessment history data limited to simply "PrevAssessed".
@@ -372,73 +392,75 @@ Assessment recency provides another perspective on the relationship between asse
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{pca_plot_initial.png}
+\includegraphics[width=.8\linewidth]{pca_plot_initial.png}
 \caption{Initial PCA Variance}
 \label{fig:pca_init}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{pca_plot_reduced.png}
+\includegraphics[width=.8\linewidth]{pca_plot_reduced.png}
 \caption{Reduced Parameter PCA Variance}
 \label{fig:pca_reduced}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{loadings_heatmap_reduced_pca.png}
+\includegraphics[width=.8\linewidth]{loadings_heatmap_reduced_pca.png}
 \caption{Loadings Heatmap for Reduced Parameter PCA}
 \label{fig:heatmap_reduced_pca}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{pc_vs_score_hists.png}f
+\includegraphics[width=.8\linewidth]{pc_vs_score_hists.png}f
 \caption{Score Distributions by PC for Reduced Parameter PCA}
 \label{fig:score_dist_by_pc_reduced_pca}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{scaled_lifecycle_pca.png}
+\includegraphics[width=.8\linewidth]{scaled_lifecycle_pca.png}
 \caption{Scaled Lifecycle PCA}
 \label{fig:scaled_lifecycle_pca}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{not_green_fac_hist.png}
+\includegraphics[width=.8\linewidth]{not_green_fac_hist.png}
 \caption{Percent Not Green by Fac}
 \label{fig:not_green_fac}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{RSL_no_PGreen.png}
+\includegraphics[width=.8\linewidth]{RSL_no_PGreen.png}
 \caption{PC1 with RSL, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge}
 \label{fig:rsl_no_pgreen}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{RSL_w_PGreen.png}
+\includegraphics[width=.8\linewidth]{RSL_w_PGreen.png}
 \caption{PC1 with RSL, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge, PercentGreen}
 \label{fig:rsl_w_pgreen}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{RSL_CI_no_PGreen.png}
+\includegraphics[width=.8\linewidth]{RSL_CI_no_PGreen.png}
 \caption{PC1 with RSL, PredictedCI, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge}
 \label{fig:rsl_ci_no_pgreen}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{RSL_CI_w_PGreen.png}
+\includegraphics[width=.8\linewidth]{RSL_CI_w_PGreen.png}
 \caption{PC1 with RSL, PredictedCI, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge, PercentGreen}
 \label{fig:rsl_ci_w_pgreen}
 \end{figure}
+
+\FloatBarrier
 
 \subsection{Predictive Modeling}
 This exploratory analysis builds the foundations for future construction of predictive models by elucidating key characteristics and limitations of the Boilers dataset. For example, a bias around 88 in the assessed boiler condition scores when compared to the Wiebull-predicted CIs was identified as a direct consequence of organizational maintenance prioritization. This will potentially need to be accounted for in future dataset modeling. Additionally, correlation among independent variables, particularly the boiler lifecycle parameters, was quantified using Spearman's rank correlation coefficients. Similarly, these correlations will need to be addressed to mitigate confounding in future predictive models. The calculated Spearman correlation coefficients also demonstrated that a boiler's condition Score cannot be predicted by a single correlation with another variable, justifying the multivariate approaches outlined in the Proposed Objectives section. Data wrangling prepared the data for PCA, and promising feature combinations were identified using PCA. PCA results were also used to develop guidelines for feature selection for future predictive models. Finally, additional analyses compared green ($\mathrm{Score}\geq 88$) and not-green ($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics, asset age, climate, season of assessment, and prediction error in order to understand how this grouping might affect trends in the dataset. 
@@ -454,8 +476,8 @@ The relevant types of machine learning models that will be tested and cross vali
     \item Supervised Artificial Neural Network (ANN)
 \end{itemize}
 
-\newpage
-\newpage
+\FloatBarrier
+
 \newpage
 
 \label{section:references}
