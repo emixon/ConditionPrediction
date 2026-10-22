@@ -218,6 +218,78 @@ PrevScore         & 85.82    & 10    & 100     & 9,334 & 14 \\
 \label{fig:crv_log}
 \end{figure}
 
+\subsection{Additional Data Insights}
+The following analyses compare green ($\mathrm{Score}\geq 88$) and not-green
+($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics,
+asset age, climate, season of assessment, and prediction error. Observations
+may include repeated assessments of the same component.
+
+\subsubsection{Lifecycle Characteristics and Assessment History}
+
+Remaining service life (RSL) and previous assessment scores provide two perspectives on the relationship between asset history and current condition (Figure~\ref{fig:julian_plot1}). Green assessments have a substantially higher average RSL (18.61) than not-green assessments (8.76), while their average previous scores are 88.56 and 79.39, respectively. The differences between these distributions indicate that both lifecycle characteristics and previous condition may contain useful information for predicting assessment scores. Although the distributions overlap, the general separation between the groups supports further consideration of these variables in predictive modeling.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot1.png}
+\caption{Remaining Service Life Distribution / Previous Assessment Score Distribution.}
+\label{fig:julian_plot1}
+\end{figure}
+
+\subsubsection{Condition Status Across Asset-Age Groups}
+
+Asset age is another important characteristic when examining differences in component condition (Figure~\ref{fig:julian_plot2}). The proportion of not-green assessments generally increases with age, rising from approximately 10.9\% for assets younger than 10 to 30.3\% for those between 30 and 40, before decreasing to 24.1\% for assets aged 40 or older. Although the relationship is not strictly increasing, the results indicate that asset age may help explain variations in assessed condition. The lower proportion among the oldest assets also suggests that age alone is insufficient to describe condition, highlighting the potential importance of other asset characteristics and assessment history.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot2.png}
+\caption{Assessment Condition by Asset Age.}
+\label{fig:julian_plot2}
+\end{figure}
+
+\subsubsection{Condition Status Across Climate Categories}
+
+Differences in assessed condition are also apparent across climate categories (Figure~\ref{fig:julian_plot3}). Climate Codes 4 and 8 have relatively high proportions of not-green assessments, approximately 50.0\% and 46.1\%, respectively, compared with only 12.4\% for Climate Code 7. This variation indicates that climate classification may provide additional information when evaluating component condition. However, nearly half of the observations have missing climate information, and the differences between categories may also reflect variations in asset age, maintenance history, or other characteristics. Further analysis is therefore necessary to determine whether climate contributes independently to condition prediction.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot3.png}
+\caption{Assessment Condition by Climate.}
+\label{fig:julian_plot3}
+\end{figure}
+
+\subsubsection{Seasonal Variation in Condition Status}
+
+The climate comparison is extended by grouping assessments into winter, spring, summer, and fall to examine potential seasonal patterns in recorded condition (Figure~\ref{fig:julian_plot4}). For Climate Code 5, the proportion of not-green assessments increases from approximately 10.8\% during summer to 24.0\% during fall, indicating differences in condition distributions between assessment periods. Similar comparisons across the remaining climate categories provide a broader perspective on how condition status varies throughout the year. Groups containing fewer than 50 observations are identified separately to avoid overinterpreting limited data. These seasonal differences may also reflect assessment timing and asset characteristics rather than direct environmental effects.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth,height=0.68\textheight,keepaspectratio]{interesting_plot4.png}
+\caption{Not-Green Assessments by Season}
+\label{fig:julian_plot4}
+\end{figure}
+
+\subsubsection{Season--Climate Condition Heatmap}
+
+The seasonal and climate comparisons are further summarized using a heatmap, allowing differences in not-green assessment percentages to be examined across both variables simultaneously (Figure~\ref{fig:julian_plot5}). The visualization highlights combinations of climate category and assessment season with relatively high or low proportions of not-green observations, providing a more consolidated view of the patterns examined in the preceding analysis. Differences across these combinations suggest that condition status may reflect several interacting characteristics rather than a single factor. However, groups with limited observations require cautious interpretation, particularly where relatively large percentages are based on small sample sizes.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot5.png}
+\caption{Not-Green Assessments by Season and Climate.}
+\label{fig:julian_plot5}
+\end{figure}
+
+\subsubsection{Prediction Error Across Asset-Age Groups}
+
+Prediction performance is examined across asset-age groups to determine whether the agreement between predicted condition indices (PredictedCI) and recorded assessment scores varies with age (Figure~\ref{fig:julian_plot6}). Mean absolute error increases from approximately 6.76 points for assets younger than 10 to 18.21 points for assets between 20 and 30, indicating that prediction accuracy is not uniform across age groups. Mean bias provides additional insight into whether condition is systematically overestimated or underestimated. These findings highlight potential limitations of the existing condition estimates and suggest that accounting for differences in asset characteristics may be important for improving future predictive models.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot6.png}
+\caption{Assessment Condition by Recency.}
+\label{fig:julian_plot6}
+\end{figure}
+
 \subsection{Principal Component Analysis}
 
 After data wrangling, a PCA was performed using the following columns of the cleaned dataset: NormlizedAge, EffectiveAge, RSL, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, LogCRV, Year, MonthSin, MonthCos, and Climate.  First, data were normalized and standardized (by centering on the mean, then dividing by standard deviation). Then, the singular value decomposiion SVD was generated. Figure \ref{fig:pca_init} shows the initial explained variance by principal component. Principal component (PC) 1 has a notable dominance of 34\% of the explained variance. Upon inspection of PC 1, all similarly derived lifecycle parameters (NormalizedAge, RSL, PredictedCI, and EffectiveAge) have roughly equal absolute values of ~.49 and are therefore relatively redundant. A new version of the PCA was then run using a single lifecycle parameter, RSL. RSL was selected because it is an intuitively interpretable value. The resulting PCA produced a smoother decline in explained variance across the PCs, which can be seen in Figure \ref{fig:pca_reduced}. Of note, a third PCA version was run that included all lifecycle parameters divided by 4 to reduce overall influence, but the results were unremarkable (refer to Figure \ref{fig:scaled_lifecycle_pca}). Therefore, further discussion of the PCA will refer to the reduced lifecycle version that was performed using RSL as the representative parameter.
@@ -308,80 +380,6 @@ Based on this analysis, future feature selection for predictive models can begin
 \includegraphics[width=1\linewidth]{RSL_CI_w_PGreen.png}
 \caption{PC1 with RSL, PredictedCI, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge, PercentGreen}
 \label{fig:rsl_ci_w_pgreen}
-\end{figure}
-
-
-\subsection{Additional Data Insights}
-% Julian
-The following analyses compare green ($\mathrm{Score}\geq 88$) and not-green
-($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics,
-asset age, climate, season of assessment, and prediction error. Observations
-may include repeated assessments of the same component.
-
-\subsubsection{Lifecycle Characteristics and Assessment History}
-
-Remaining service life (RSL) and previous assessment scores provide two perspectives on the relationship between asset history and current condition (Figure~\ref{fig:julian_plot1}). Green assessments have a substantially higher average RSL (18.61) than not-green assessments (8.76), while their average previous scores are 88.56 and 79.39, respectively. The differences between these distributions indicate that both lifecycle characteristics and previous condition may contain useful information for predicting assessment scores. Although the distributions overlap, the general separation between the groups supports further consideration of these variables in predictive modeling.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot1.png}
-\caption{Remaining Service Life Distribution / Previous Assessment Score Distribution.}
-\label{fig:julian_plot1}
-\end{figure}
-
-\subsubsection{Condition Status Across Asset-Age Groups}
-
-Asset age is another important characteristic when examining differences in component condition (Figure~\ref{fig:julian_plot2}). The proportion of not-green assessments generally increases with age, rising from approximately 10.9\% for assets younger than 10 to 30.3\% for those between 30 and 40, before decreasing to 24.1\% for assets aged 40 or older. Although the relationship is not strictly increasing, the results indicate that asset age may help explain variations in assessed condition. The lower proportion among the oldest assets also suggests that age alone is insufficient to describe condition, highlighting the potential importance of other asset characteristics and assessment history.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot2.png}
-\caption{Assessment Condition by Asset Age.}
-\label{fig:julian_plot2}
-\end{figure}
-
-\subsubsection{Condition Status Across Climate Categories}
-
-Differences in assessed condition are also apparent across climate categories (Figure~\ref{fig:julian_plot3}). Climate Codes 4 and 8 have relatively high proportions of not-green assessments, approximately 50.0\% and 46.1\%, respectively, compared with only 12.4\% for Climate Code 7. This variation indicates that climate classification may provide additional information when evaluating component condition. However, nearly half of the observations have missing climate information, and the differences between categories may also reflect variations in asset age, maintenance history, or other characteristics. Further analysis is therefore necessary to determine whether climate contributes independently to condition prediction.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot3.png}
-\caption{Assessment Condition by Climate.}
-\label{fig:julian_plot3}
-\end{figure}
-
-\subsubsection{Seasonal Variation in Condition Status}
-
-The climate comparison is extended by grouping assessments into winter, spring, summer, and fall to examine potential seasonal patterns in recorded condition (Figure~\ref{fig:julian_plot4}). For Climate Code 5, the proportion of not-green assessments increases from approximately 10.8\% during summer to 24.0\% during fall, indicating differences in condition distributions between assessment periods. Similar comparisons across the remaining climate categories provide a broader perspective on how condition status varies throughout the year. Groups containing fewer than 50 observations are identified separately to avoid overinterpreting limited data. These seasonal differences may also reflect assessment timing and asset characteristics rather than direct environmental effects.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth,height=0.68\textheight,keepaspectratio]{interesting_plot4.png}
-\caption{Not-Green Assessments by Season}
-\label{fig:julian_plot4}
-\end{figure}
-
-\subsubsection{Season--Climate Condition Heatmap}
-
-The seasonal and climate comparisons are further summarized using a heatmap, allowing differences in not-green assessment percentages to be examined across both variables simultaneously (Figure~\ref{fig:julian_plot5}). The visualization highlights combinations of climate category and assessment season with relatively high or low proportions of not-green observations, providing a more consolidated view of the patterns examined in the preceding analysis. Differences across these combinations suggest that condition status may reflect several interacting characteristics rather than a single factor. However, groups with limited observations require cautious interpretation, particularly where relatively large percentages are based on small sample sizes.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot5.png}
-\caption{Not-Green Assessments by Season and Climate.}
-\label{fig:julian_plot5}
-\end{figure}
-
-\subsubsection{Prediction Error Across Asset-Age Groups}
-
-Prediction performance is examined across asset-age groups to determine whether the agreement between predicted condition indices (PredictedCI) and recorded assessment scores varies with age (Figure~\ref{fig:julian_plot6}). Mean absolute error increases from approximately 6.76 points for assets younger than 10 to 18.21 points for assets between 20 and 30, indicating that prediction accuracy is not uniform across age groups. Mean bias provides additional insight into whether condition is systematically overestimated or underestimated. These findings highlight potential limitations of the existing condition estimates and suggest that accounting for differences in asset characteristics may be important for improving future predictive models.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot6.png}
-\caption{Assessment Condition by Recency.}
-\label{fig:julian_plot6}
 \end{figure}
 
 \subsection{Next Steps}
