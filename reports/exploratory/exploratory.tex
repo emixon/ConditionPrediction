@@ -382,12 +382,19 @@ Based on this analysis, future feature selection for predictive models can begin
 \label{fig:rsl_ci_w_pgreen}
 \end{figure}
 
-\subsection{Next Steps}
-This exploratory analysis builds the foundations for future construction of predictive models by elucidating key characteristics and limitations of the Boilers dataset. For example, a bias around 88 in the assessed boiler condition scores when compared to the Wiebull-predicted CIs was identified as a direct consequence of organizational maintenance prioritization. This will potentially need to be accounted for in future dataset modeling. Additionally, correlation among independent variables, particularly the boiler lifecycle parameters, was quantified using Spearman's rank correlation coefficients. Similarly, these correlations will need to be addressed to mitigate confounding in future predictive models. The calculated Spearman correlation coefficients also demonstrated that a boiler's condition Score cannot be predicted by a single correlation with another variable, justifying the multivariate approaches outlined in the Proposed Objectives section. Data wrangling prepared the data for PCA, and promising feature combinations were identified using PCA. PCA results were also used to develop guidelines for feature selection for future predictive models. Finally, additional analyses compared green ($\mathrm{Score}\geq 88$) and not-green
-($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics, asset age, climate, season of assessment, and prediction error in order to understand how this grouping might affect trends in the dataset. 
+\subsection{Predictive Modeling}
+This exploratory analysis builds the foundations for future construction of predictive models by elucidating key characteristics and limitations of the Boilers dataset. For example, a bias around 88 in the assessed boiler condition scores when compared to the Wiebull-predicted CIs was identified as a direct consequence of organizational maintenance prioritization. This will potentially need to be accounted for in future dataset modeling. Additionally, correlation among independent variables, particularly the boiler lifecycle parameters, was quantified using Spearman's rank correlation coefficients. Similarly, these correlations will need to be addressed to mitigate confounding in future predictive models. The calculated Spearman correlation coefficients also demonstrated that a boiler's condition Score cannot be predicted by a single correlation with another variable, justifying the multivariate approaches outlined in the Proposed Objectives section. Data wrangling prepared the data for PCA, and promising feature combinations were identified using PCA. PCA results were also used to develop guidelines for feature selection for future predictive models. Finally, additional analyses compared green ($\mathrm{Score}\geq 88$) and not-green ($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics, asset age, climate, season of assessment, and prediction error in order to understand how this grouping might affect trends in the dataset. 
 
-The findings of this exploratory analysis will be directly used in the next steps of our proposed workflow, including development of prediction models using ANNs and decision-tree libraries trained on identified PCs.
-\newpage
+Insights gained from exploratory analysis will be used in the development of several probabilistic classification models.  These  models can be useful for assessment planning when there is a desire to calculate the value of information gained from a new assessment compared against the expected cost of the maintenance action and the cost of the assessment itself. The developed models will return a probability distribution classifying the probability of a new assessment score resulting in either the "Do Nothing" (Green) or "Repair" (Not Green) maintenance decision regions. In practice, this type of model could be extended to include more decision regions like "Replace" or "Renovate" etc. depending on the maintenance manager's priorities.
+
+The relevant types of machine learning models that will be tested and cross validated to find the best performance include:
+
+\begin{itemize}
+    \item Multivariable Regression
+    \item Supervised K-Means
+    \item Supervised XGBoost Decision tree
+    \item Supervised Artificial Neural Network (ANN)
+\end{itemize}
 
 \begin{table}
 \caption{Assessment Observation Data}
