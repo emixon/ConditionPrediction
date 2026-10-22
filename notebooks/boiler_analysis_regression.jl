@@ -19,6 +19,7 @@ begin
     using StatsBase
     using HypothesisTests
     using StatsPlots.PlotMeasures: mm
+    using PairPlots, Plots
 end
 
 # ╔═╡ 8a745a37-637c-49e7-9b80-a00e35e2134d
@@ -778,6 +779,15 @@ begin
     plot!(plt, framestyle = :box)
 end
 
+# ╔═╡ 094638dd-6bc0-4d5e-a448-58e9fb71d3a0
+Matrix(boilers)
+
+# ╔═╡ 70b3477f-6f43-448e-a870-dc55d7ac0b7c
+begin
+	figure = pairplot(boilers_cor)
+	display(figure)
+end
+
 # ╔═╡ cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
 md"""
 # Predictive Models
@@ -853,6 +863,8 @@ md"""
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 # ╠═3f0bb0f0-29ae-4e19-a6c1-dbb881074367
 # ╠═5eb540bd-b9b8-4a0f-a902-91199da3bee5
+# ╠═094638dd-6bc0-4d5e-a448-58e9fb71d3a0
+# ╠═70b3477f-6f43-448e-a870-dc55d7ac0b7c
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
 # ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
 # ╠═c4f0042e-dac8-4caf-b983-8bc9678b4d1b
