@@ -754,7 +754,7 @@ begin
         xrotation = 45,
         clim = (-1,1),
         c = :bwr, 
-        title = "Spearman Correlation Heatmap",
+        #title = "Spearman Correlation Heatmap",
         yflip = true,
         annotate = annotations,
         aspect_ratio = :equal,
@@ -765,7 +765,7 @@ begin
         #size = (1000,850)
         size = (1600, 1600),
         dpi = 200,
-        titlefontsize = 40,
+       #titlefontsize = 40,
         tickfontsize = 24,
         left_margin = 18mm,
         bottom_margin = 20mm,
@@ -779,21 +779,42 @@ begin
     plot!(plt, framestyle = :box)
 end
 
+# ╔═╡ 860e8c6a-1a82-4caa-b8d7-3411d5a77962
+savefig("spearman_heatmap_with_sig")
+
+# ╔═╡ eede658f-b6d3-47be-a5e3-c1a6873897c9
+
+
+# ╔═╡ 49bec9d7-c299-473b-ac89-bb23d36355ac
+
+
+# ╔═╡ a8df4899-9178-4b98-8183-056810119467
+
+
+# ╔═╡ 50bbe087-de89-429f-8fae-77919773861e
+
+
+# ╔═╡ 5d193b87-fc5c-479e-9793-652a27034297
+
+
 # ╔═╡ 094638dd-6bc0-4d5e-a448-58e9fb71d3a0
 boilers_cor
 
-# ╔═╡ 8659c629-c98a-42c5-ad97-a12e49c2191f
-df_cor = select(boilers_raw_data, cor_vars)
-
 # ╔═╡ 8b747149-5618-4df9-8592-565744551f94
-
+begin
+    # get dataframe of raw data and convert all columns to float64 data type
+    df_cor = select(boilers_raw_data, cor_vars)
+    for col in names(df_cor)
+        df_cor[!, col] = float.(df_cor[!, col])
+    end
+end
 
 # ╔═╡ 1d28836f-4010-470d-9729-b44e3f858910
-
+df_cor
 
 # ╔═╡ f94307e2-63bb-4268-97d1-f13f48154150
-vcorrplot = @df df_cor corrplot([:NormalizedAge :EffectiveAge :RSL :Recency :PrevScore :PrevAssessed :PredictedCI :Score :Qty :AssetAge :AssetDesignLife :LogCRV :Month :Year :Climate], size = (5000, 5000), title = "Correlation Plot for Boilers Raw Data", titlefontsize=70, guidefontsize=11, tickfontsize=10,
-        margin=6Plots.mm, left_margin=10Plots.mm, bottom_margin=12Plots.mm)
+vcorrplot = @df df_cor corrplot([:NormalizedAge :EffectiveAge :RSL :Recency :PrevScore :PrevAssessed :PredictedCI :Score :Qty :AssetAge :AssetDesignLife :LogCRV :Month :Year :Climate], size = (5000, 5000), guidefontsize=11, tickfontsize=10,
+        margin=25Plots.mm, left_margin=25Plots.mm, bottom_margin=25Plots.mm)
 
 # ╔═╡ 4b87187a-8931-4322-8dbb-5a4a362b5711
 # ╠═╡ disabled = true
@@ -885,8 +906,13 @@ md"""
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
 # ╠═3f0bb0f0-29ae-4e19-a6c1-dbb881074367
 # ╠═5eb540bd-b9b8-4a0f-a902-91199da3bee5
+# ╠═860e8c6a-1a82-4caa-b8d7-3411d5a77962
+# ╠═eede658f-b6d3-47be-a5e3-c1a6873897c9
+# ╠═49bec9d7-c299-473b-ac89-bb23d36355ac
+# ╠═a8df4899-9178-4b98-8183-056810119467
+# ╠═50bbe087-de89-429f-8fae-77919773861e
+# ╠═5d193b87-fc5c-479e-9793-652a27034297
 # ╠═094638dd-6bc0-4d5e-a448-58e9fb71d3a0
-# ╠═8659c629-c98a-42c5-ad97-a12e49c2191f
 # ╠═8b747149-5618-4df9-8592-565744551f94
 # ╠═1d28836f-4010-470d-9729-b44e3f858910
 # ╠═f94307e2-63bb-4268-97d1-f13f48154150
