@@ -81,7 +81,7 @@ As a first step of exploratory analysis, the shapes of individual columns of the
 
 For the purposes of this project, two of the most pertinent columns in the dataset include the predicted condition score, or CI, of the Weibull degradation model and the actual observed score of the assessor (i.e., assessor rating).  Based on the histograms for these two variables, there is a visually identifiable difference between the expected degradation and the assessed scores (Figures \ref{fig:ci_dist} and \ref{fig:score_dist}). There also seems to be a heavy bias toward ratings of 88 in the assessed boiler condition scores compared to the Weibull-predicted CIs.
 
-There are some rational narratives that can explain the disagreement in predicted and assessed scores.  The SMS system from which the observations are sourced is used by organizations to plan maintenance management.  Work analysis rules are put into place within the system to prioritize maintenance funding allocation.  For "D30" systems (mechanical systems in UNIFORMAT which includes boilers), a typical ruleset will specify that components with a CI less than 85 should be marked for repair action, and components with a remaining service life (RSL) of less than 2 should be marked for replacement. If maintenance dollars are being executed by that guidance, then it would be expected that assessors rarely come across boilers with condition less than 85.  This also makes rational sense from a facility function perspective, heating, ventilation, and air conditioning (HVAC) systems tend to get immediate attention when they fail, as they are considered critical for most facilities. A score of 88 represents a well maintained and functioning unit, which is what is expected based on maintenance priority. Additionally, this bias is not unique to SMS data, and has been observed in other inspection annd assessment-based condition datasets. One such example is an Ontario bridge inspection dataset where a similar condition clustering is observed at around 77 (Based on their unique condition rating system) \cite{ontario_bridge_conditions_2021}.
+There are some rational narratives that can explain the disagreement in predicted and assessed scores.  The SMS system from which the observations are sourced is used by organizations to plan maintenance management.  Work analysis rules are put into place within the system to prioritize maintenance funding allocation.  For "D30" systems (This refers to the UNIFORMAT classification hierarchy, "D30" in this case represents D - mechanical systems and 30 - the subset for boilers), a typical ruleset will specify that components with a CI less than 85 should be marked for repair action, and components with a remaining service life (RSL) of less than 2 should be marked for replacement. If maintenance dollars are being executed by that guidance, then it would be expected that assessors rarely come across boilers with condition less than 85.  This also makes rational sense from a facility function perspective, heating, ventilation, and air conditioning (HVAC) systems tend to get immediate attention when they fail, as they are considered critical for most facilities. A score of 88 represents a well maintained and functioning unit, which is what is expected based on maintenance priority. Additionally, this bias is not unique to SMS data, and has been observed in other inspection annd assessment-based condition datasets. One such example is an Ontario bridge inspection dataset where a similar condition clustering is observed at around 77 (Based on their unique condition rating system) \cite{ontario_bridge_conditions_2021}.
 
 Additionally, based on this visual inspection of the assessed score distribution, questions were formulated to attempt to identify how data could be classified to distinguish between boilers that are kept to specified condition versus those that are allowed to deteriorate. Answers to these questions may assist in feature selection for the future construction of a prediction model. Looking at several of the other distributions, including Remaining Service Life (RSL) (Figure \ref{fig:rsl_dist}), Month (Figure \ref{fig:month_dist}), and Climate (Figure \ref{fig:climate_dist}), raised possible considerations including:
 
@@ -218,6 +218,78 @@ PrevScore         & 85.82    & 10    & 100     & 9,334 & 14 \\
 \label{fig:crv_log}
 \end{figure}
 
+\subsection{Additional Data Insights}
+The following analyses compare green ($\mathrm{Score}\geq 88$) and not-green
+($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics,
+asset age, climate, season of assessment, and prediction error. Observations
+may include repeated assessments of the same component.
+
+\subsubsection{Lifecycle Characteristics and Assessment History}
+
+Remaining service life (RSL) and previous assessment scores provide two perspectives on the relationship between asset history and current condition (Figure~\ref{fig:julian_plot1}). Green assessments have a substantially higher average RSL (18.61) than not-green assessments (8.76), while their average previous scores are 88.56 and 79.39, respectively. The differences between these distributions indicate that both lifecycle characteristics and previous condition may contain useful information for predicting assessment scores. Although the distributions overlap, the general separation between the groups supports further consideration of these variables in predictive modeling.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot1.png}
+\caption{Remaining Service Life Distribution / Previous Assessment Score Distribution.}
+\label{fig:julian_plot1}
+\end{figure}
+
+\subsubsection{Condition Status Across Asset-Age Groups}
+
+Asset age is another important characteristic when examining differences in component condition (Figure~\ref{fig:julian_plot2}). The proportion of not-green assessments generally increases with age, rising from approximately 10.9\% for assets younger than 10 to 30.3\% for those between 30 and 40, before decreasing to 24.1\% for assets aged 40 or older. Although the relationship is not strictly increasing, the results indicate that asset age may help explain variations in assessed condition. The lower proportion among the oldest assets also suggests that age alone is insufficient to describe condition, highlighting the potential importance of other asset characteristics and assessment history.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot2.png}
+\caption{Assessment Condition by Asset Age.}
+\label{fig:julian_plot2}
+\end{figure}
+
+\subsubsection{Condition Status Across Climate Categories}
+
+Differences in assessed condition are also apparent across climate categories (Figure~\ref{fig:julian_plot3}). Climate Codes 4 and 8 have relatively high proportions of not-green assessments, approximately 50.0\% and 46.1\%, respectively, compared with only 12.4\% for Climate Code 7. This variation indicates that climate classification may provide additional information when evaluating component condition. However, nearly half of the observations have missing climate information, and the differences between categories may also reflect variations in asset age, maintenance history, or other characteristics. Further analysis is therefore necessary to determine whether climate contributes independently to condition prediction.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot3.png}
+\caption{Assessment Condition by Climate.}
+\label{fig:julian_plot3}
+\end{figure}
+
+\subsubsection{Seasonal Variation in Condition Status}
+
+The climate comparison is extended by grouping assessments into winter, spring, summer, and fall to examine potential seasonal patterns in recorded condition (Figure~\ref{fig:julian_plot4}). For Climate Code 5, the proportion of not-green assessments increases from approximately 10.8\% during summer to 24.0\% during fall, indicating differences in condition distributions between assessment periods. Similar comparisons across the remaining climate categories provide a broader perspective on how condition status varies throughout the year. Groups containing fewer than 50 observations are identified separately to avoid overinterpreting limited data. These seasonal differences may also reflect assessment timing and asset characteristics rather than direct environmental effects.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth,height=0.68\textheight,keepaspectratio]{interesting_plot4.png}
+\caption{Not-Green Assessments by Season}
+\label{fig:julian_plot4}
+\end{figure}
+
+\subsubsection{Season--Climate Condition Heatmap}
+
+The seasonal and climate comparisons are further summarized using a heatmap, allowing differences in not-green assessment percentages to be examined across both variables simultaneously (Figure~\ref{fig:julian_plot5}). The visualization highlights combinations of climate category and assessment season with relatively high or low proportions of not-green observations, providing a more consolidated view of the patterns examined in the preceding analysis. Differences across these combinations suggest that condition status may reflect several interacting characteristics rather than a single factor. However, groups with limited observations require cautious interpretation, particularly where relatively large percentages are based on small sample sizes.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot5.png}
+\caption{Not-Green Assessments by Season and Climate.}
+\label{fig:julian_plot5}
+\end{figure}
+
+\subsubsection{Prediction Error Across Asset-Age Groups}
+
+Prediction performance is examined across asset-age groups to determine whether the agreement between predicted condition indices (PredictedCI) and recorded assessment scores varies with age (Figure~\ref{fig:julian_plot6}). Mean absolute error increases from approximately 6.76 points for assets younger than 10 to 18.21 points for assets between 20 and 30, indicating that prediction accuracy is not uniform across age groups. Mean bias provides additional insight into whether condition is systematically overestimated or underestimated. These findings highlight potential limitations of the existing condition estimates and suggest that accounting for differences in asset characteristics may be important for improving future predictive models.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{interesting_plot6.png}
+\caption{Assessment Condition by Recency.}
+\label{fig:julian_plot6}
+\end{figure}
+
 \subsection{Principal Component Analysis}
 
 After data wrangling, a PCA was performed using the following columns of the cleaned dataset: NormlizedAge, EffectiveAge, RSL, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, LogCRV, Year, MonthSin, MonthCos, and Climate.  First, data were normalized and standardized (by centering on the mean, then dividing by standard deviation). Then, the singular value decomposiion SVD was generated. Figure \ref{fig:pca_init} shows the initial explained variance by principal component. Principal component (PC) 1 has a notable dominance of 34\% of the explained variance. Upon inspection of PC 1, all similarly derived lifecycle parameters (NormalizedAge, RSL, PredictedCI, and EffectiveAge) have roughly equal absolute values of ~.49 and are therefore relatively redundant. A new version of the PCA was then run using a single lifecycle parameter, RSL. RSL was selected because it is an intuitively interpretable value. The resulting PCA produced a smoother decline in explained variance across the PCs, which can be seen in Figure \ref{fig:pca_reduced}. Of note, a third PCA version was run that included all lifecycle parameters divided by 4 to reduce overall influence, but the results were unremarkable (refer to Figure \ref{fig:scaled_lifecycle_pca}). Therefore, further discussion of the PCA will refer to the reduced lifecycle version that was performed using RSL as the representative parameter.
@@ -310,86 +382,19 @@ Based on this analysis, future feature selection for predictive models can begin
 \label{fig:rsl_ci_w_pgreen}
 \end{figure}
 
+\subsection{Predictive Modeling}
+This exploratory analysis builds the foundations for future construction of predictive models by elucidating key characteristics and limitations of the Boilers dataset. For example, a bias around 88 in the assessed boiler condition scores when compared to the Wiebull-predicted CIs was identified as a direct consequence of organizational maintenance prioritization. This will potentially need to be accounted for in future dataset modeling. Additionally, correlation among independent variables, particularly the boiler lifecycle parameters, was quantified using Spearman's rank correlation coefficients. Similarly, these correlations will need to be addressed to mitigate confounding in future predictive models. The calculated Spearman correlation coefficients also demonstrated that a boiler's condition Score cannot be predicted by a single correlation with another variable, justifying the multivariate approaches outlined in the Proposed Objectives section. Data wrangling prepared the data for PCA, and promising feature combinations were identified using PCA. PCA results were also used to develop guidelines for feature selection for future predictive models. Finally, additional analyses compared green ($\mathrm{Score}\geq 88$) and not-green ($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics, asset age, climate, season of assessment, and prediction error in order to understand how this grouping might affect trends in the dataset. 
 
-\subsection{Additional Data Insights}
-% Julian
-The following analyses compare green ($\mathrm{Score}\geq 88$) and not-green
-($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics,
-asset age, climate, season of assessment, and prediction error. Observations
-may include repeated assessments of the same component.
+Insights gained from exploratory analysis will be used in the development of several probabilistic classification models.  These  models can be useful for assessment planning when there is a desire to calculate the value of information gained from a new assessment compared against the expected cost of the maintenance action and the cost of the assessment itself. The developed models will return a probability distribution classifying the probability of a new assessment score resulting in either the "Do Nothing" (Green) or "Repair" (Not Green) maintenance decision regions. In practice, this type of model could be extended to include more decision regions like "Replace" or "Renovate" etc. depending on the maintenance manager's priorities.
 
-\subsubsection{Lifecycle Characteristics and Assessment History}
+The relevant types of machine learning models that will be tested and cross validated to find the best performance include:
 
-Remaining service life (RSL) and previous assessment scores provide two perspectives on the relationship between asset history and current condition (Figure~\ref{fig:julian_plot1}). Green assessments have a substantially higher average RSL (18.61) than not-green assessments (8.76), while their average previous scores are 88.56 and 79.39, respectively. The differences between these distributions indicate that both lifecycle characteristics and previous condition may contain useful information for predicting assessment scores. Although the distributions overlap, the general separation between the groups supports further consideration of these variables in predictive modeling.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot1.png}
-\caption{Remaining Service Life Distribution / Previous Assessment Score Distribution.}
-\label{fig:julian_plot1}
-\end{figure}
-
-\subsubsection{Condition Status Across Asset-Age Groups}
-
-Asset age is another important characteristic when examining differences in component condition (Figure~\ref{fig:julian_plot2}). The proportion of not-green assessments generally increases with age, rising from approximately 10.9\% for assets younger than 10 to 30.3\% for those between 30 and 40, before decreasing to 24.1\% for assets aged 40 or older. Although the relationship is not strictly increasing, the results indicate that asset age may help explain variations in assessed condition. The lower proportion among the oldest assets also suggests that age alone is insufficient to describe condition, highlighting the potential importance of other asset characteristics and assessment history.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot2.png}
-\caption{Assessment Condition by Asset Age.}
-\label{fig:julian_plot2}
-\end{figure}
-
-\subsubsection{Condition Status Across Climate Categories}
-
-Differences in assessed condition are also apparent across climate categories (Figure~\ref{fig:julian_plot3}). Climate Codes 4 and 8 have relatively high proportions of not-green assessments, approximately 50.0\% and 46.1\%, respectively, compared with only 12.4\% for Climate Code 7. This variation indicates that climate classification may provide additional information when evaluating component condition. However, nearly half of the observations have missing climate information, and the differences between categories may also reflect variations in asset age, maintenance history, or other characteristics. Further analysis is therefore necessary to determine whether climate contributes independently to condition prediction.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot3.png}
-\caption{Assessment Condition by Climate.}
-\label{fig:julian_plot3}
-\end{figure}
-
-\subsubsection{Seasonal Variation in Condition Status}
-
-The climate comparison is extended by grouping assessments into winter, spring, summer, and fall to examine potential seasonal patterns in recorded condition (Figure~\ref{fig:julian_plot4}). For Climate Code 5, the proportion of not-green assessments increases from approximately 10.8\% during summer to 24.0\% during fall, indicating differences in condition distributions between assessment periods. Similar comparisons across the remaining climate categories provide a broader perspective on how condition status varies throughout the year. Groups containing fewer than 50 observations are identified separately to avoid overinterpreting limited data. These seasonal differences may also reflect assessment timing and asset characteristics rather than direct environmental effects.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth,height=0.68\textheight,keepaspectratio]{interesting_plot4.png}
-\caption{Not-Green Assessments by Season}
-\label{fig:julian_plot4}
-\end{figure}
-
-\subsubsection{Season--Climate Condition Heatmap}
-
-The seasonal and climate comparisons are further summarized using a heatmap, allowing differences in not-green assessment percentages to be examined across both variables simultaneously (Figure~\ref{fig:julian_plot5}). The visualization highlights combinations of climate category and assessment season with relatively high or low proportions of not-green observations, providing a more consolidated view of the patterns examined in the preceding analysis. Differences across these combinations suggest that condition status may reflect several interacting characteristics rather than a single factor. However, groups with limited observations require cautious interpretation, particularly where relatively large percentages are based on small sample sizes.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot5.png}
-\caption{Not-Green Assessments by Season and Climate.}
-\label{fig:julian_plot5}
-\end{figure}
-
-\subsubsection{Prediction Error Across Asset-Age Groups}
-
-Prediction performance is examined across asset-age groups to determine whether the agreement between predicted condition indices (PredictedCI) and recorded assessment scores varies with age (Figure~\ref{fig:julian_plot6}). Mean absolute error increases from approximately 6.76 points for assets younger than 10 to 18.21 points for assets between 20 and 30, indicating that prediction accuracy is not uniform across age groups. Mean bias provides additional insight into whether condition is systematically overestimated or underestimated. These findings highlight potential limitations of the existing condition estimates and suggest that accounting for differences in asset characteristics may be important for improving future predictive models.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot6.png}
-\caption{Assessment Condition by Recency.}
-\label{fig:julian_plot6}
-\end{figure}
-
-\subsection{Next Steps}
-This exploratory analysis builds the foundations for future construction of predictive models by elucidating key characteristics and limitations of the Boilers dataset. For example, a bias around 88 in the assessed boiler condition scores when compared to the Wiebull-predicted CIs was identified as a direct consequence of organizational maintenance prioritization. This will potentially need to be accounted for in future dataset modeling. Additionally, correlation among independent variables, particularly the boiler lifecycle parameters, was quantified using Spearman's rank correlation coefficients. Similarly, these correlations will need to be addressed to mitigate confounding in future predictive models. The calculated Spearman correlation coefficients also demonstrated that a boiler's condition Score cannot be predicted by a single correlation with another variable, justifying the multivariate approaches outlined in the Proposed Objectives section. Data wrangling prepared the data for PCA, and promising feature combinations were identified using PCA. PCA results were also used to develop guidelines for feature selection for future predictive models. Finally, additional analyses compared green ($\mathrm{Score}\geq 88$) and not-green
-($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics, asset age, climate, season of assessment, and prediction error in order to understand how this grouping might affect trends in the dataset. 
-
-The findings of this exploratory analysis will be directly used in the next steps of our proposed workflow, including development of prediction models using ANNs and decision-tree libraries trained on identified PCs.
-\newpage
+\begin{itemize}
+    \item Multivariable Regression
+    \item Supervised K-Means
+    \item Supervised XGBoost Decision tree
+    \item Supervised Artificial Neural Network (ANN)
+\end{itemize}
 
 \begin{table}
 \caption{Assessment Observation Data}

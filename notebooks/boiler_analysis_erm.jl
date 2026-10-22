@@ -714,7 +714,7 @@ function GetScorePercentGreen3D(
     p = scatter(
         observation_modes[not_green, 1],
         observation_modes[not_green, 2],
-        df.PercentGreen[not_green];
+        observation_modes[not_green, 3],
         color = :darkorange,
         alpha = 0.45,
         markersize = 3,
@@ -722,10 +722,10 @@ function GetScorePercentGreen3D(
         label = "Not Green (Score < $threshold)",
         xlabel = "PC1 Observation Coordinate",
         ylabel = "PC2 Observation Coordinate",
-        zlabel = "Facility Green Rate (%)",
+        zlabel = "PC3 Observation Coordinate",
         title = "Boiler PCA Coordinates and Facility Green Rate",
-        zlims = (0, 100),
-        camera = (45, 25),
+        #zlims = (0, 100),
+        camera = (25, 60),
         size = (1800, 1200),
         dpi = 200,
         titlefontsize = 28,
@@ -742,7 +742,7 @@ function GetScorePercentGreen3D(
         p,
         observation_modes[green, 1],
         observation_modes[green, 2],
-        df.PercentGreen[green];
+        observation_modes[green, 3],
         color = :forestgreen,
         alpha = 0.45,
         markersize = 3,
@@ -771,7 +771,7 @@ let
         :MonthCos,
         :LogCRV,  # Currently divided by Qty to normalize individual boiler cost
         :Climate,
-        #:PercentGreen
+        :PercentGreen
     ]#, 
     #spec_indicator_cols, # Too many columns
     #fac_indicator_cols)  # Too many columns
@@ -788,30 +788,20 @@ let
         squared = true,
     )
 
-    histogram_plots = [
-        GetPCScoreHistogram(
+    histogram_plot = GetPCScoreHistogram(
             observation_modes,
             wrangled_boilers.Score,
-            pc;
+            1;
             threshold = 85,
         )
-        for pc in 1:modes
-    ]
 
-    score_histograms = plot(
-        histogram_plots...;
-        #layout = (4, 5),
-        size = (1200, 1000),
-        dpi = 200,
-    )
-
-    score_percentgreen_3d = GetScorePercentGreen3D(
+    scatter_plot = GetScorePercentGreen3D(
         observation_modes,
         wrangled_boilers;
-        threshold = 88,
+        threshold = 85,
     )
 
-    pca_plot, loadings_heatmap, score_histograms, score_percentgreen_3d
+    pca_plot, loadings_heatmap, histogram_plot, scatter_plot
     #savefig(score_histograms, "RSL_CI_no_PGreen.png")
 end
 
@@ -2549,7 +2539,7 @@ version = "1.13.0+0"
 # ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
 # ╟─653ae9d0-bca6-4778-a8d3-9d07dbf143c2
 # ╠═e346bbf0-066e-4de6-bcdd-6c2732756d17
-# ╟─5a3a0107-bed6-440a-9805-5a2b9b483b72
+# ╠═5a3a0107-bed6-440a-9805-5a2b9b483b72
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
 # ╟─ee72c729-a93a-4ceb-a091-0dd32d1e0555
 # ╠═eecfb266-cd30-4f02-a1e5-61f9427d42d7
