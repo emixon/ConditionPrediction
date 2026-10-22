@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v1.0.4
+# v1.0.3
 
 using Markdown
 using InteractiveUtils
@@ -391,10 +391,28 @@ md"""
 ## Interesting Plot 1
 """
 
+# ╔═╡ a684491d-5717-498b-b3a7-1c864afb9a31
+
+
 # ╔═╡ 611d8e7c-fdfe-43e8-a12d-647272d2099e
 md"""
 Remaining service life (RSL) and previous assessment scores provide two perspectives on the relationship between asset history and current condition. Green assessments have a substantially higher average RSL (18.61) than not-green assessments (8.76), while their average previous scores are 88.56 and 79.39, respectively. The differences between these distributions indicate that both lifecycle characteristics and previous condition may contain useful information for predicting assessment scores. Although the distributions overlap, the general separation between the groups supports further consideration of these variables in predictive modeling.
 """
+
+# ╔═╡ 4ae06b54-432d-4434-9bc8-47c8a91240e7
+style = (
+    fontfamily = "sans-serif",
+    titlefontsize = 13,
+    guidefontsize = 11,
+    tickfontsize = 10,
+    legendfontsize = 9,
+    background_color = :white,
+    framestyle = :axes,
+    grid = false,
+    margin = 6Plots.mm,
+    left_margin = 12Plots.mm,
+    bottom_margin = 14Plots.mm,
+)
 
 # ╔═╡ e7fae12f-3e0b-4e9f-a874-4cb0db599494
 interesting_plot1 = let
@@ -406,7 +424,6 @@ interesting_plot1 = let
             error("Both groups need recorded values for $variable.")
         end
 
-        # Use matching bin boundaries.
         low, high = extrema(vcat(green, notgreen))
         if low == high
             low -= 0.5
@@ -417,17 +434,19 @@ interesting_plot1 = let
         histogram([green, notgreen];
             bins=edges, normalize=:probability, alpha=0.5,
             label=["Green (n=$(length(green)))" "Not green (n=$(length(notgreen)))"],
-            title=heading, xlabel=heading, ylabel="Proportion within group",
+            title=heading, xlabel=heading,
+            ylabel="Proportion within group"
         )
     end
 
     plot(
         compare_histogram(:RSL, "Remaining Service Life"),
         compare_histogram(:PrevScore, "Previous Assessment Score");
-        layout=(1, 2), size=(1200, 600),
-        legend=:outertop, legend_column=2, legendfontsize=9,
-        titlefontsize=13, guidefontsize=11, tickfontsize=10,
-        margin=6Plots.mm, left_margin=10Plots.mm, bottom_margin=12Plots.mm,
+        style...,
+        layout=(1, 2),
+        size=(1200, 800),
+        legend=:outertop,
+        legend_column=2
     )
 end
 
@@ -457,14 +476,21 @@ interesting_plot2 = let
     labels = ["$(ages[i])\n(n=$(length(groups[i])))" for i in 1:5]
 
     plot(1:5, [green notgreen];
-        label=["Green" "Not green"], legend=:outertop, legend_column=2,
-        markershape=[:circle :diamond], linestyle=[:solid :dash], linewidth=3,
-        xticks=(1:5, labels), xlims=(0.5, 5.5),
-        ylims=(-3, 103), yticks=0:20:100,
+        style...,
+        label=["Green" "Not green"],
+        legend=:outertop,
+        legend_column=2,
+        markershape=[:circle :diamond],
+        linestyle=[:solid :dash],
+        linewidth=3,
+        xticks=(1:5, labels),
+        xlims=(0.5, 5.5),
+        ylims=(-3, 103),
+        yticks=0:20:100,
         title="Green vs Not Green Across Asset-Age Groups",
-        xlabel="Asset-Age Group", ylabel="Assessments within age group (%)",
-        size=(1000, 600), titlefontsize=13, guidefontsize=12, tickfontsize=11,
-        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=14Plots.mm,
+        xlabel="Asset-Age Group",
+        ylabel="Assessments within age group (%)",
+        size=(1200, 800)
     )
 end
 
@@ -479,6 +505,7 @@ Differences in assessed condition are also apparent across climate categories. C
 """
 
 # ╔═╡ 4757dd14-b688-49cc-8e73-3878eceff35e
+
 interesting_plot3 = let
     d = comparison_data[isfinite.(comparison_data.Score), :]
     climate = string.(coalesce.(d.Climate, "Unknown"))
@@ -490,19 +517,26 @@ interesting_plot3 = let
     labels = ["$(codes[i])\n(n=$(length(groups[i])))" for i in eachindex(codes)]
 
     p = groupedbar(1:length(codes), [green notgreen];
-        bar_position=:stack, bar_width=0.65, fillalpha=0.6, linewidth=0,
-        label=["Green" "Not green"], legend=:outertop, legend_column=2,
+        style...,
+        bar_position=:stack,
+        bar_width=0.65,
+        fillalpha=0.6,
+        linewidth=0,
+        label=["Green" "Not green"],
+        legend=:outertop,
+        legend_column=2,
         xticks=(1:length(codes), labels),
         xlims=(0.5, length(codes)+0.5),
-        ylims=(0, 110), yticks=0:20:100, ywiden=false,
+        ylims=(0, 110),
+        yticks=0:20:100,
+        ywiden=false,
         title="Green vs Not Green by Climate",
-        xlabel="Climate Code", ylabel="Assessments (%)",
-        size=(max(1100, 140*length(codes)), 650), grid=false,
-        titlefontsize=13, guidefontsize=12, tickfontsize=11,
-        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
+        xlabel="Climate Code",
+        ylabel="Assessments (%)",
+        size=(max(1200, 140*length(codes)), 800),
+        bottom_margin=16Plots.mm
     )
 
-    # Display percentages inside or above bars.
     for i in eachindex(green)
         if isnan(green[i])
             annotate!(p, i, 50, text("No data", 10))
@@ -547,24 +581,34 @@ interesting_plot4 = let
     codes = sort(unique(d.Climate))
 
     function season_plot(season)
-        groups = [d.Score[(d.Climate .== c) .& (d.Season .== season)] for c in codes]
+        groups = [d.Score[(d.Climate .== c) .& (d.Season .== season)]
+                  for c in codes]
+
         counts = length.(groups)
         rates = [counts[i] < 50 ? NaN : 100 * mean(groups[i] .< 88)
                  for i in eachindex(codes)]
 
-        labels = ["$(Int(codes[i]))\n(n=$(counts[i]))" for i in eachindex(codes)]
+        labels = ["$(Int(codes[i]))\n(n=$(counts[i]))"
+                  for i in eachindex(codes)]
 
         p = bar(1:length(codes), rates;
-            label="", color=:steelblue, bar_width=0.65,
+            label="",
+            color=:steelblue,
+            bar_width=0.65,
             xticks=(1:length(codes), labels),
             xlims=(0.5, length(codes)+0.5),
-            ylims=(0, 110), yticks=0:20:100, ywiden=false,
-            xlabel="Climate Code", ylabel="Not Green (%)",
-            title=season, grid=false,
+            ylims=(0, 110),
+            yticks=0:20:100,
+            ywiden=false,
+            xlabel="Climate Code",
+            ylabel="Not Green (%)",
+            title=season,
+            grid=false
         )
 
         for i in eachindex(codes)
-            label = counts[i] < 50 ? "Low n" : "$(round(rates[i]; digits=1))%"
+            label = counts[i] < 50 ? "Low n" :
+                    "$(round(rates[i]; digits=1))%"
             y = counts[i] < 50 ? 8 : rates[i] + 4
             annotate!(p, i, y, text(label, 9))
         end
@@ -572,12 +616,13 @@ interesting_plot4 = let
         p
     end
 
-    plots = [season_plot(s) for s in ["Winter", "Spring", "Summer", "Fall"]]
+    plots = [season_plot(s) for s in
+             ["Winter", "Spring", "Summer", "Fall"]]
 
     plot(plots...;
-        layout=(2, 2), size=(1300, 950),
-        titlefontsize=13, guidefontsize=11, tickfontsize=10,
-        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=12Plots.mm,
+        style...,
+        layout=(2, 2),
+        size=(1300, 950)
     )
 end
 
@@ -608,26 +653,35 @@ interesting_plot5 = let
     climate = string.(d.Climate)
     codes = sort(unique(climate))
 
-    groups = [d.Score[(climate .== codes[i]) .& (d.Season .== seasons[j])]
+    groups = [d.Score[(climate .== codes[i]) .&
+                      (d.Season .== seasons[j])]
               for i in eachindex(codes), j in 1:4]
 
     counts = length.(groups)
     rates = [isempty(g) ? NaN : 100 * mean(g .< 88) for g in groups]
 
     p = heatmap(1:4, 1:length(codes), rates;
-        xticks=(1:4, seasons), yticks=(1:length(codes), codes),
-        xlabel="Assessment Season", ylabel="Climate Code",
+        style...,
+        xticks=(1:4, seasons),
+        yticks=(1:length(codes), codes),
+        xlabel="Assessment Season",
+        ylabel="Climate Code",
         title="Not-Green Assessments by Season and Climate",
         color=cgrad([:royalblue, :lightskyblue, :moccasin, :darkorange]),
-        clims=(0, 100), colorbar_title="Not green (%)",
-        yflip=true, size=(1000, max(500, 65 * length(codes))),
-        left_margin=12Plots.mm, bottom_margin=10Plots.mm,
+        clims=(0, 100),
+        colorbar_title="Not green (%)",
+        yflip=true,
+        size=(1200, max(800, 65*length(codes)))
     )
 
     for i in eachindex(codes), j in 1:4
         n = counts[i, j]
-        label = n == 0 ? "No data" : "$(round(rates[i, j]; digits=1))%\n(n=$n)"
-        text_color = n > 0 && (rates[i, j] < 30 || rates[i, j] > 75) ? :white : :black
+        label = n == 0 ? "No data" :
+                "$(round(rates[i, j]; digits=1))%\n(n=$n)"
+
+        text_color = n > 0 && (rates[i, j] < 30 || rates[i, j] > 75) ?
+                     :white : :black
+
         annotate!(p, j, i, text(label, 9, text_color))
     end
 
@@ -641,67 +695,92 @@ md"""
 
 # ╔═╡ 986775ce-5341-4597-9c3d-20fe0f785b58
 md"""
-Prediction performance is examined across asset-age groups to determine whether the agreement between predicted condition indices (PredictedCI) and recorded assessment scores varies with age. Mean absolute error increases from approximately 6.76 points for assets younger than 10 to 18.21 points for assets between 20 and 30, indicating that prediction accuracy is not uniform across age groups. Mean bias provides additional insight into whether condition is systematically overestimated or underestimated. These findings highlight potential limitations of the existing condition estimates and suggest that accounting for differences in asset characteristics may be important for improving future predictive models.
+Assessment recency provides another perspective on the relationship between assessment history and current boiler condition. The proportion of not-green assessments is compared across different time intervals since the previous assessment, including boilers with no recorded assessment history. Differences in these proportions may indicate that the time elapsed between assessments contains useful information for understanding variations in boiler condition. Comparing each group with the overall not-green percentage also helps identify whether certain reassessment intervals are associated with relatively poorer condition.
 """
 
-# ╔═╡ d4398bfd-0fa9-496e-a5a3-8b9f459927ff
+# ╔═╡ 00156390-9033-438e-ab74-b9393ef9b1cf
 interesting_plot6 = let
-    d = dropmissing(comparison_data, [:AssetAge, :PredictedCI])
-    d = d[isfinite.(d.Score) .& isfinite.(d.AssetAge) .&
-          isfinite.(d.PredictedCI) .& (d.AssetAge .>= 0), :]
+    d = comparison_data[isfinite.(comparison_data.Score), :]
+    valid = [ismissing(r) || (isfinite(r) && r >= 0) for r in d.Recency]
+    d = d[valid, :]
 
-    nrow(d) > 0 || error("No valid prediction records.")
+    function recency_group(r)
+        if ismissing(r)
+            return 1
+        elseif r <= 1
+            return 2
+        elseif r <= 3
+            return 3
+        elseif r <= 5
+            return 4
+        else
+            return 5
+        end
+    end
 
-    edges = [0, 10, 20, 30, 40, Inf]
-    ages = ["0–<10", "10–<20", "20–<30", "30–<40", "40+"]
-    residual = d.Score .- d.PredictedCI
+    categories = recency_group.(d.Recency)
 
-    groups = [residual[(d.AssetAge .>= edges[i]) .&
-                       (d.AssetAge .< edges[i+1])] for i in 1:5]
+    groups = [d.Score[categories .== i] for i in 1:5]
+    counts = length.(groups)
 
-    mae = [isempty(g) ? NaN : mean(abs.(g)) for g in groups]
-    bias = [isempty(g) ? NaN : mean(g) for g in groups]
-    labels = ["$(ages[i])\n(n=$(length(groups[i])))" for i in 1:5]
+    rates = [isempty(g) ? NaN : 100 * mean(g .< 88) for g in groups]
 
-    p = plot(1:5, [mae bias];
-        label=["Mean Absolute Error" "Mean Bias (Score - PredictedCI)"],
-        markershape=[:circle :diamond], linestyle=[:solid :dash],
-        linewidth=3, markersize=7,
-        xticks=(1:5, labels), xlims=(0.5, 5.5),
-        xlabel="Asset-Age Group", ylabel="Error (Score Points)",
-        title="Prediction Error by Asset Age",
-        legend=:outertop, legend_column=2,
-        size=(1050, 580),
-        left_margin=12Plots.mm, bottom_margin=14Plots.mm,
+    labels = [
+        "No previous\nassessment",
+        "0–1 years",
+        "2–3 years",
+        "4–5 years",
+        "6+ years"
+    ]
+
+    labels = ["$(labels[i])\n(n=$(counts[i]))" for i in 1:5]
+
+    overall = 100 * mean(d.Score .< 88)
+
+    p = bar(1:5, rates;
+        style...,
+        color=:steelblue,
+        bar_width=0.65,
+        label="",
+        xticks=(1:5, labels),
+        xlims=(0.5, 5.5),
+        ylims=(0, 112),
+        yticks=0:20:100,
+        ywiden=false,
+        title="Not-Green Assessments by Assessment Recency",
+        xlabel="Years Since Previous Assessment",
+        ylabel="Not-Green Assessments (%)",
+        size=(1200, 800),
+        bottom_margin=18Plots.mm
     )
 
-    hline!(p, [0]; linestyle=:dot, label="")
+    hline!(p, [overall];
+        color=:gray,
+        linestyle=:dash,
+        linewidth=2,
+        label="Overall ($(round(overall; digits=1))%)"
+    )
+
+    for i in 1:5
+        if counts[i] == 0
+            annotate!(p, i, 5, text("No data", 10))
+        else
+            annotate!(p, i, min(rates[i] + 4, 107),
+                      text("$(round(rates[i]; digits=1))%", 10))
+        end
+    end
+
+    plot!(p; legend=:outertop)
     p
 end
 
-# ╔═╡ 00156390-9033-438e-ab74-b9393ef9b1cf
-let
-    project_dir = normpath(joinpath(@__DIR__, ".."))
-
-    # Locate exploratory.tex in the project.
-    texfiles = [joinpath(dir, "exploratory.tex")
-                for (dir, _, files) in walkdir(project_dir)
-                if "exploratory.tex" in files]
-
-    length(texfiles) == 1 || error("Could not locate one exploratory.tex.")
-
-    # Save images where the report expects them.
-    figdir = normpath(joinpath(dirname(only(texfiles)), "..", "figures"))
-    mkpath(figdir)
-
-    figures = (interesting_plot1, interesting_plot2, interesting_plot3,
-               interesting_plot4, interesting_plot5, interesting_plot6)
-
-    for (i, fig) in enumerate(figures)
-        savefig(fig, joinpath(figdir, "interesting_plot$(i).png"))
-    end
-
-    "Saved 6 figures to: $figdir"
+# ╔═╡ 023a5858-1710-4ae0-8b81-939a679b4014
+begin
+    savefig(interesting_plot1, "interesting_plot1.png")
+    savefig(interesting_plot2, "interesting_plot2.png")
+    savefig(interesting_plot3, "interesting_plot3.png")
+    savefig(interesting_plot4, "interesting_plot4.png")
+    savefig(interesting_plot6, "interesting_plot6.png")
 end
 
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
@@ -890,7 +969,9 @@ md"""
 # ╠═12b33241-044c-4631-a9b9-e9c44e24847a
 # ╟─0263eb8b-4e72-4ebc-988b-e524302c2d6a
 # ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
+# ╟─a684491d-5717-498b-b3a7-1c864afb9a31
 # ╟─611d8e7c-fdfe-43e8-a12d-647272d2099e
+# ╟─4ae06b54-432d-4434-9bc8-47c8a91240e7
 # ╟─e7fae12f-3e0b-4e9f-a874-4cb0db599494
 # ╟─345182d1-e582-4498-ad3a-daed465891ec
 # ╟─b41a40ab-1eee-4f01-a8f3-a32a249cf6c7
@@ -906,8 +987,8 @@ md"""
 # ╟─8cb1f1b2-e752-4110-8ed9-17c5b0eefdf2
 # ╟─aa974399-dc5f-4858-97e1-d15dc3f44ce8
 # ╟─986775ce-5341-4597-9c3d-20fe0f785b58
-# ╟─d4398bfd-0fa9-496e-a5a3-8b9f459927ff
-# ╠═00156390-9033-438e-ab74-b9393ef9b1cf
+# ╟─00156390-9033-438e-ab74-b9393ef9b1cf
+# ╟─023a5858-1710-4ae0-8b81-939a679b4014
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
