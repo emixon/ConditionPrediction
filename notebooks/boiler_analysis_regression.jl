@@ -816,6 +816,9 @@ df_cor
 vcorrplot = @df df_cor corrplot([:NormalizedAge :EffectiveAge :RSL :Recency :PrevScore :PrevAssessed :PredictedCI :Score :Qty :AssetAge :AssetDesignLife :LogCRV :Month :Year :Climate], size = (5000, 5000), guidefontsize=11, tickfontsize=10,
         margin=25Plots.mm, left_margin=25Plots.mm, bottom_margin=25Plots.mm)
 
+# ╔═╡ 5bbb1ed3-5fb3-4643-a081-a5b6a3b3d0b7
+savefig("boiler_corr_plot.png")
+
 # ╔═╡ 4b87187a-8931-4322-8dbb-5a4a362b5711
 # ╠═╡ disabled = true
 #=╠═╡
@@ -916,6 +919,7 @@ md"""
 # ╠═8b747149-5618-4df9-8592-565744551f94
 # ╠═1d28836f-4010-470d-9729-b44e3f858910
 # ╠═f94307e2-63bb-4268-97d1-f13f48154150
+# ╠═5bbb1ed3-5fb3-4643-a081-a5b6a3b3d0b7
 # ╠═4b87187a-8931-4322-8dbb-5a4a362b5711
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
 # ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
