@@ -747,7 +747,6 @@ interesting_plot6 = let
         ylims=(0, 112),
         yticks=0:20:100,
         ywiden=false,
-        title="Not-Green Assessments by Assessment Recency",
         xlabel="Years Since Previous Assessment",
         ylabel="Not-Green Assessments (%)",
         size=(1200, 800),
@@ -780,6 +779,7 @@ begin
     savefig(interesting_plot2, "interesting_plot2.png")
     savefig(interesting_plot3, "interesting_plot3.png")
     savefig(interesting_plot4, "interesting_plot4.png")
+    savefig(interesting_plot5, "interesting_plot5.png")
     savefig(interesting_plot6, "interesting_plot6.png")
 end
 
@@ -987,8 +987,8 @@ md"""
 # ╟─8cb1f1b2-e752-4110-8ed9-17c5b0eefdf2
 # ╟─aa974399-dc5f-4858-97e1-d15dc3f44ce8
 # ╟─986775ce-5341-4597-9c3d-20fe0f785b58
-# ╟─00156390-9033-438e-ab74-b9393ef9b1cf
-# ╟─023a5858-1710-4ae0-8b81-939a679b4014
+# ╠═00156390-9033-438e-ab74-b9393ef9b1cf
+# ╠═023a5858-1710-4ae0-8b81-939a679b4014
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
 # ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
