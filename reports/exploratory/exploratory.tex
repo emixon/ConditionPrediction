@@ -1,4 +1,4 @@
-\documentclass[Journal,letterpaper,NoPageNumbers,NoLineNumbers]{ascelike-new}
+\documentclass[NewProceedings,letterpaper,NoPageNumbers,NoLineNumbers, DoubleSpace]{ascelike-new}
 \WarningFilter{caption}{Unknown document class}
 %% Please choose the appropriate document class option:
 % "Journal" produces double-spaced manuscripts for ASCE journals.
@@ -17,6 +17,7 @@
 \usepackage{subcaption}
 \usepackage{amsmath}
 \usepackage{newtxtext,newtxmath}
+\usepackage{placeins}
 \usepackage[colorlinks=true,citecolor=red,linkcolor=black]{hyperref}
 %
 % Please add the first author's last name here for the footer:
@@ -71,7 +72,74 @@ The proposed workflow for the project is:
 \item Perform comparative study between prediction models to identify which has the best predictive performance.
 \end{enumerate}
 
-\newpage
+\begin{table}
+\caption{Assessment Observation Data}
+\label{table:assembly}
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{l l p{3.2in}}
+\hline\hline
+\multicolumn{1}{c}{Column} &
+\multicolumn{1}{c}{Type (Units)} &
+\multicolumn{1}{c}{Description} \\
+\hline
+Id & Int & Unique identifier for the observed component. Components can have multiple observations.\\
+Spec & Int & Unique identifier for the specification of the component. This represents the specific type of inventory being assessed (i.e. 2 HP Pump, 400 gallon AST, etc.) \\
+MEC & Int & Unique identifier for the Material Equipment Category. A less specific reference to the type of object being assessed (i.e. Pump, AST, Gas Boiler, etc.) \\
+System & Int & Unique identifier for a very generic classification of the component (i.e. HVAC Equipment, Exterior Shell, Plumbing, etc.) \\
+DesignLife & Int (Years) & Designed lifespan in years of the component. \\
+Qty & Float (UOM) & Quantity of the component. Units defined by UOM. \\
+UOM & String & Unit of Measure of the component Qty. \\
+NormalizedAge & Float & Equal to $\text{ComponentAge} / \text{DesignLife}$. \\
+EffectiveAge & Float & The curve adjusted age of the component at the time of assessment \\
+RSL & Float & The adjusted remaining service life of the component equal to $\text{DesignLife} - \text{EffectiveAge}$ \\
+Recency & Int (Years) & Number of years since the last assessment. Is empty if the component has not been assessed before. \\
+PredictedCI & Float & Predicted Condition Index by the knowledge-based deterioration model at the time of the observation. Calculated using SMS Weibull Model. \\
+Score & Float & Expert assessor's assigned condition rating. \\
+CRV & Int (Dollars) & Component Replacement Value (i.e. Cost to replace the component) \\
+Year & Int & Calendar year of the assessment. \\
+Month & Int & Calendar month of the assessment. \\
+Climate & Int & Department of Energy (DOE) based Climate Zones. \\
+Fac & Int & Unique identifier for the type/purpose of the component's parent asset. \\
+AssetAge & Int (Years) & Age in years of the component's parent asset. \\
+AssetDesignLife & Int (Years) & Designed lifespan in years of the component's parent asset. \\
+PrevScore & Float & Previous assessment score. Is empty if the component has not assessed before. \\
+\hline
+\multicolumn{3}{l}{$\ast$ System->MEC->Spec form a data hierarchy similar to a WBS like classification structure.} \\
+\multicolumn{3}{l}{$\ast$ Data has been obfuscated, replacing readable definitions with numbers.} \\
+\hline\hline
+\end{tabular}
+\normalsize
+\end{table}
+
+\begin{table}
+\caption{Example Assessment Scoring Criteria based on USACE Guidance.}
+\label{table:AssessmentScores}
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{l r p{3.5in}}
+\hline\hline
+\multicolumn{1}{c}{Rating} &
+\multicolumn{1}{c}{CI Value} &
+\multicolumn{1}{c}{Rating Definition} \\
+\hline
+Green (+) & 100 & Entire component is free of observable distresses. Like-new condition. \\
+Green & 95 & No serviceability or reliability reduction. Slight degradation but noncritical. No work other than routine maintenance is required. \\
+Green ($-$) & 88 & Slight or no serviceability or reliability reduction. Some noticeable degradation is present but remains noncritical. No work other than routine maintenance is required. \\
+Amber (+) & 79 & Serviceability or reliability is degraded but remains adequate. Moderate deterioration is present but remains noncritical. Minor repairs are needed. \\
+Amber & 68 & Serviceability or reliability is noticeably impaired. Moderate deterioration or damage requires corrective repairs. \\
+Amber ($-$) & 60 & Significant serviceability or reliability loss. Significant degradation or damage requires major rehabilitation or overhaul. \\
+Red (+) & 50 & Significant serviceability or reliability loss. Repairs are not feasible, and replacement is needed. \\
+Red & 25 & Severe serviceability or reliability reduction may result in loss of use or safety. Immediate replacement is warranted. \\
+Red ($-$) & 10 & Complete degradation and loss of serviceability. May result in damage to surrounding components. Replace immediately. \\
+\hline\hline
+\end{tabular}
+\normalsize
+\end{table}
+
+\FloatBarrier
 
 \section{Exploratory Data Analysis}
 
@@ -95,42 +163,42 @@ Additionally, based on this visual inspection of the assessed score distribution
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{ci_dist.png}
+\includegraphics[width=.8\linewidth]{ci_dist.png}
 \caption{Predicted CI Distribution}
 \label{fig:ci_dist}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{score_dist.png}
+\includegraphics[width=.8\linewidth]{score_dist.png}
 \caption{Assessment Score Distribution}
 \label{fig:score_dist}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{rsl_dist.png}
+\includegraphics[width=.8\linewidth]{rsl_dist.png}
 \caption{Remaining Service Life Distribution}
 \label{fig:rsl_dist}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{month_dist.png}
+\includegraphics[width=.8\linewidth]{month_dist.png}
 \caption{Assessment Month Distribution}
 \label{fig:month_dist}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{climate_dist.png}
+\includegraphics[width=.8\linewidth]{climate_dist.png}
 \caption{Assessment Climate Distribution}
 \label{fig:climate_dist}
 \end{figure}
 
 \begin{figure}
 \centering
-\includegraphics[width=1\linewidth]{DOE_Climate_Zones.png}
+\includegraphics[width=.8\linewidth]{DOE_Climate_Zones.png}
 \caption{Dept. of Energy Climate Zones Map \protect\cite{doe_building_america_climate_guidance}}
 \label{fig:doe_climate_map}
 \end{figure}
@@ -386,99 +454,8 @@ The relevant types of machine learning models that will be tested and cross vali
     \item Supervised Artificial Neural Network (ANN)
 \end{itemize}
 
-\begin{table}
-\caption{Assessment Observation Data}
-\label{table:assembly}
-\centering
-\small
-\renewcommand{\arraystretch}{1.25}
-\begin{tabular}{l l p{3.2in}}
-\hline\hline
-\multicolumn{1}{c}{Column} &
-\multicolumn{1}{c}{Type (Units)} &
-\multicolumn{1}{c}{Description} \\
-\hline
-Id & Int & Unique identifier for the observed component. Components can have multiple observations.\\
-Spec & Int & Unique identifier for the specification of the component. This represents the specific type of inventory being assessed (i.e. 2 HP Pump, 400 gallon AST, etc.) \\
-MEC & Int & Unique identifier for the Material Equipment Category. A less specific reference to the type of object being assessed (i.e. Pump, AST, Gas Boiler, etc.) \\
-System & Int & Unique identifier for a very generic classification of the component (i.e. HVAC Equipment, Exterior Shell, Plumbing, etc.) \\
-DesignLife & Int (Years) & Designed lifespan in years of the component. \\
-Qty & Float (UOM) & Quantity of the component. Units defined by UOM. \\
-UOM & String & Unit of Measure of the component Qty. \\
-NormalizedAge & Float & Equal to $\text{ComponentAge} / \text{DesignLife}$. \\
-EffectiveAge & Float & The curve adjusted age of the component at the time of assessment \\
-RSL & Float & The adjusted remaining service life of the component equal to $\text{DesignLife} - \text{EffectiveAge}$ \\
-Recency & Int (Years) & Number of years since the last assessment. Is empty if the component has not been assessed before. \\
-PredictedCI & Float & Predicted Condition Index by the knowledge-based deterioration model at the time of the observation. Calculated using SMS Weibull Model. \\
-Score & Float & Expert assessor's assigned condition rating. \\
-CRV & Int (Dollars) & Component Replacement Value (i.e. Cost to replace the component) \\
-Year & Int & Calendar year of the assessment. \\
-Month & Int & Calendar month of the assessment. \\
-Climate & Int & Department of Energy (DOE) based Climate Zones. \\
-Fac & Int & Unique identifier for the type/purpose of the component's parent asset. \\
-AssetAge & Int (Years) & Age in years of the component's parent asset. \\
-AssetDesignLife & Int (Years) & Designed lifespan in years of the component's parent asset. \\
-PrevScore & Float & Previous assessment score. Is empty if the component has not assessed before. \\
-\hline
-\multicolumn{3}{l}{$\ast$ System->MEC->Spec form a data hierarchy similar to a WBS like classification structure.} \\
-\multicolumn{3}{l}{$\ast$ Data has been obfuscated, replacing readable definitions with numbers.} \\
-\hline\hline
-\end{tabular}
-\normalsize
-\end{table}
-
-\begin{table}
-\caption{Example Assessment Scoring Criteria based on USACE Guidance.}
-\label{table:AssessmentScores}
-\centering
-\small
-\renewcommand{\arraystretch}{1.25}
-\begin{tabular}{l r p{3.5in}}
-\hline\hline
-\multicolumn{1}{c}{Rating} &
-\multicolumn{1}{c}{CI Value} &
-\multicolumn{1}{c}{Rating Definition} \\
-\hline
-Green (+) &
-100 &
-Entire component is free of observable distresses. Like-new condition. \\
-
-Green &
-95 &
-No serviceability or reliability reduction. Slight degradation but noncritical. No work other than routine maintenance is required. \\
-
-Green ($-$) &
-88 &
-Slight or no serviceability or reliability reduction. Some noticeable degradation is present but remains noncritical. No work other than routine maintenance is required. \\
-
-Amber (+) &
-79 &
-Serviceability or reliability is degraded but remains adequate. Moderate deterioration is present but remains noncritical. Minor repairs are needed. \\
-
-Amber &
-68 &
-Serviceability or reliability is noticeably impaired. Moderate deterioration or damage requires corrective repairs. \\
-
-Amber ($-$) &
-60 &
-Significant serviceability or reliability loss. Significant degradation or damage requires major rehabilitation or overhaul. \\
-
-Red (+) &
-50 &
-Significant serviceability or reliability loss. Repairs are not feasible, and replacement is needed. \\
-
-Red &
-25 &
-Severe serviceability or reliability reduction may result in loss of use or safety. Immediate replacement is warranted. \\
-
-Red ($-$) &
-10 &
-Complete degradation and loss of serviceability. May result in damage to surrounding components. Replace immediately. \\
-\hline\hline
-\end{tabular}
-\normalsize
-\end{table}
-
+\newpage
+\newpage
 \newpage
 
 \label{section:references}
