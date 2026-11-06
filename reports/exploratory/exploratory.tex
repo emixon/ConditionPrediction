@@ -468,10 +468,150 @@ The relevant types of machine learning models that will be tested and cross vali
 
 \begin{itemize}
     \item Multivariable Regression % Juliana
-    \item Supervised K-Means % Skip
     \item Supervised XGBoost Decision tree % Julian
     \item Supervised Artificial Neural Network (ANN) % Eric
 \end{itemize}
+
+\FloatBarrier
+
+\section{Preliminary Modeling}
+
+\subsection{Artificial Neural Network (ANN)}
+
+An artificial neural network (ANN) was developed using Julia's MLJ, Flux, and Optimisers packages. The ANN was configured to be a binary classifier. With the motivation for the model to be useful in deriving decision region probabilities in a value of information model, the binary classification setup allows model output representative of $P(SomeEvent)$. For simplicity to start, the model assumes only two possible decision regions of "NeedsAction" (Assessed Score < 85) or "DoNothing" (Assessed score >= 85). Insights from these simplified decision thresholds can be extended in future iterations to handle more defined regions. The initial feature set included RSL, PredictedCI, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate parameters based on previous exploratory analysis results. Baseline hyperparameters for the ANN were chosen from general guesses and are shown in Table \ref{tab:ann-baseline}.
+
+\begin{table}[htbp]
+\centering
+\caption{Baseline ANN configuration.}
+\label{tab:ann-baseline}
+\begin{tabular}{ll}
+\hline
+\textbf{Parameter} & \textbf{Baseline setting} \\
+\hline
+ANN architecture & Two hidden layers: 16 and 8 nodes \\
+Learning Rate & 0.001 \\
+Regularization & $\lambda = 0.0001$ \\
+Feature selection & 8 predictors \\
+Epochs & 150 \\
+Batch size & 32 \\
+Optimizer & Adam \\
+\hline
+\end{tabular}
+\end{table}
+
+Table \ref{tab:ann-baseline-performance} shows the baseline results.  For a model predicting probabilities, the log loss metric is used rather than RMSE as it evaluates the quality of predicted class probabilities rather than error in a numeric prediction. Lower log loss indicates a generally better performing model (0 being ideal). Cross validation was performed with a typical 5-fold strategy on 80\% of the total data with 20\% held out for testing. The cross validation log loss was $\approx$ 0.3986 which remained close to the held out test log loss of $\approx$ 0.4014. This indicates that the ANN performed similarly across the cross-validation validation folds and the held-out test data (a positive outcome).
+
+Since the dataset is considerably imbalanced (i.e. $\approx$ 79\% of data is "DoNothing" and $\approx$ 21\% is "NeedsAction"), one could imagine a classifier that only returns "DoNothing" would be accurate 79\% of the time.  The imbalance provides a probability based baseline for evaluating log loss. Rather than assigning a hard "DoNothing" label to every boiler, a prevalence only model assigns the same probability distribution to every observation based only on the observed frequency in the training data (DoNothing: $\approx$ 79\%, NeedsAction: $\approx$ 21\%) regardless of any parameter values. This prevalence only model produced a log loss of 0.5237. The baseline ANN achieved a lower held out log loss of 0.4014, indicating that its feature informed probability estimates were better than simply using the overall proportion of "NeedsAction" observations. The reduction in log loss was approximately 23.4\%.
+
+Additionally, the probability output was converted to a raw classification with an initial naive cutoff of .5 (pick the class with P() > .5) to determine if the ANN can provide better classification performance than the always "DoNothing" model. The ANN achieved a precision of 0.713, meaning that approximately 71\% of boilers flagged as "NeedsAction" were observed in that region. Recall was 0.401, meaning that the model identified approximately 40\% of all observed "NeedsAction" cases at that cutoff. The overall classification accuracy was 0.835, which is a roughly 5\% improvement over simply guessing "DoNothing" for all predictions.
+
+\begin{table}[htbp]
+\centering
+\caption{Performance of the initial baseline ANN using the held-out test subset.}
+\label{tab:ann-baseline-performance}
+\begin{tabular}{lr}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Cross-validated log loss & 0.398558 \\
+Held out test log loss & 0.401356 \\
+Prevalence only baseline test log loss & 0.523673 \\
+Relative reduction in test log loss & 23.4\% \\
+Precision at 0.50 cutoff & 0.713376 \\
+Recall at 0.50 cutoff & 0.401434 \\
+Accuracy at 0.50 cutoff & 0.834762 \\
+\hline
+\end{tabular}
+\end{table}
+
+With the baseline developed, a series of experiments were performed to improve upon the initial hyperparameter selection.  Iterative tests were performed by doing sweeps of different values of one parameter at a time, choosing the best performer, then iterating the same tests on another individual parameter.  Successive tests would utilize the best overall combinations of parameters.  Table \ref{tab:ann-tuning} summarizes the number of experiments performed.  Baseline epochs, batch size, and Optimizer selection proved to be the best performing options while $\lambda$, Learning Rate, and hidden layer configuration parameters were updated.  Overall performance gains were rather minimal.  Interestingly, experiments in hidden layer architecture revealed the best performance in one very large hidden layer as opposed to additional layers. 40 architecture selections were tried, and shallow networks consistently outperformed deep networks. Experiments with utilizing PCA projected data as input into the model were also performed, however this resulted in slightly worse model performance and was therefore omitted from the final configuration. Table \ref{tab:ann-configuration} shows the finalized configuration with the best performance found.  As an additional note, randomization was initialized with a hardcoded seed to ensure experimentation was repeatable and comparable.
+
+With hyperparameters tuned, the final stage of experimentation was variable feature selection. Trials of over 100 feature combinations where performed and the final (best performing) ANN feature selection used RSL, NormalizedAge, EffectiveAge, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate. This includes many more parameters than our hypothesized options during exploratory analysis.  While the performance difference was minimal, inclusion of all lifecycle parameters still resulted in lower log loss. The only omitted parameters were Qty, AssetAge, AssetDesignLife, and PercentGreen. 
+
+\begin{table}[htbp]
+\centering
+\caption{Summary of ANN tuning experiments.}
+\label{tab:ann-tuning}
+\begin{tabular}{llll}
+\hline
+\textbf{Experiment} & \textbf{Configurations} & \textbf{Selected setting} & \textbf{Best CV log loss} \\
+\hline
+Network architecture & 40 architectures & One 112 node layer & 0.384918 \\
+Learning rate & 9 values & 0.001 & 0.384918 \\
+Regularization & 12 $\lambda$ values & $\lambda = 0.01$ & 0.383320 \\
+Feature selection & 100 combinations & 12 features & 0.377854 \\
+Epochs & 12 values & 150 & No Improvement \\
+Batch size & 12 values & 32 & No Improvement \\
+Optimizer & 10 models & Adam & No Improvement \\
+PCA Space & 1-6 PC modes & None & No Improvement \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Selected ANN configuration.}
+\label{tab:ann-configuration}
+\begin{tabular}{ll}
+\hline
+\textbf{Model element} & \textbf{Selected setting} \\
+\hline
+Input representation & Standardized parameters; no PCA \\
+Selected feature count & 12 \\
+Hidden-layer architecture & One hidden layer with 112 nodes \\
+Optimizer & Adam \\
+Learning rate & 0.001 \\
+Regularization coefficient ($\lambda$) & 0.01 \\
+Epochs & 150 \\
+Batch size & 32 \\
+Train/test partition & 80\% / 20\%, stratified \\
+Cross-validation & Five-fold stratified cross-validation \\
+\hline
+\end{tabular}
+\end{table}
+
+%TODO
+Place some wrap up comments here referencing final performance and discussing the three plots and their implications.
+
+\begin{table}[htbp]
+\centering
+\caption{Performance of the selected ANN using the held-out test subset.}
+\label{tab:ann-performance}
+\begin{tabular}{lr}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Cross-validated log loss & 0.377854 \\
+Held-out test log loss & 0.388509 \\
+Prevalence-only baseline test log loss & 0.523673 \\
+Relative reduction in test log loss & 25.8\% \\
+Precision at 0.50 cutoff & 0.726644 \\
+Recall at 0.50 cutoff & 0.376344 \\
+Accuracy at 0.50 cutoff & 0.833593 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{ANN_Probabilities_By_Region.png}
+\caption{Predicted Probability by Observed Region}
+\label{fig:ann_probs_by_region}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{ANN_Prediction_Reliabilty.png}
+\caption{Calibration of Predicted Probabilities}
+\label{fig:ann_prediction_reliability}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{ANN_Cutoff_Tradeoff.png}
+\caption{Assessment Selection Tradeoff}
+\label{fig:ann_cutoff_tradeoff}
+\end{figure}
 
 \FloatBarrier
 

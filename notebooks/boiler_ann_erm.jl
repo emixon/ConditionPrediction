@@ -19,7 +19,18 @@ begin
     using Statistics
     using LinearAlgebra
     using StatsBase
+    using MLJ
+    using MLJFlux
+    using Flux
+    import Optimisers
+    import Random
 end
+
+# ╔═╡ d779c071-1218-45cc-ae66-16e01e12e1e3
+using MLJMultivariateStatsInterface
+
+# ╔═╡ 2207c531-a82f-48a7-b5bc-e10918390456
+PCA_model = MLJ.@load PCA pkg=MultivariateStats verbosity=0
 
 # ╔═╡ f92de274-9c7f-4ea2-84a5-d18f97044498
 md"""
@@ -323,13 +334,1432 @@ let
     #savefig(score_histograms, "RSL_CI_no_PGreen.png")
 end
 
+# ╔═╡ 6f6e6ca0-f018-4ddd-b8e9-61dd05f00560
+md"""
+### Assessment outcome probability model
+
+The predictive model is intended to support condition-assessment planning rather than
+only estimate a single condition score. For a component being considered for assessment
+at a candidate date, the model estimates the probability that a newly collected field
+assessment would fall within each maintenance decision region.
+
+The predictor variables represent the component state and context available before a
+new assessment, including lifecycle characteristics, modeled deterioration state,
+historical assessment information, and relevant facility or environmental attributes.
+The response variable is the field-assessed condition score recorded during the new
+assessment.
+
+For the preliminary analysis, the score distribution is simplified into two decision
+regions:
+
+- **Do Nothing:** Score greater than or equal to 85
+- **Needs Action:** Score less than 85
+
+The ANN estimates the conditional probabilities:
+
+\[
+P(\mathrm{Score} \geq 85 \mid X)
+\]
+
+and
+
+\[
+P(\mathrm{Score} < 85 \mid X)
+\]
+
+where \(X\) represents the component state and contextual attributes available at the
+candidate assessment date.
+"""
+
+# ╔═╡ 31d5dc1e-5f96-4841-9ce1-1877ca215454
+md"""
+### Feature set and binary response variable
+
+The preliminary ANN uses component lifecycle, modeled condition, assessment-history,
+seasonal, cost, and environmental variables as predictors. The target variable is a
+binary maintenance decision region derived from the field-assessed condition score.
+
+Observations with Score greater than or equal to 85 were classified as `DoNothing`,
+while observations with Score below 85 were classified as `NeedsAction`. This
+transformation allows the model to estimate the probability that a candidate assessment
+would reveal a condition requiring action rather than only producing a single point
+estimate of condition.
+"""
+
+# ╔═╡ 2a218ae9-897e-4f89-8895-87826b38d47a
+begin
+    # Feature Selection
+    feature_cols = [
+        :RSL,
+        :PredictedCI,
+        :PrevAssessed,
+        :NormalizedAssetAge,
+        :MonthSin,
+        :MonthCos,
+        :LogCRV,
+        :Climate,
+        #:PercentGreen,
+    ]
+
+    # Select the desired features
+    model_df = dropmissing(
+        select(wrangled_boilers, vcat(feature_cols, [:Score]))
+    )
+
+    # Convert to Float32 for Flux
+    X = Float32.(select(model_df, feature_cols))
+
+    # Setup the output categories (simple split on 85 threshold for now)
+    y = categorical(
+        ifelse.(
+            model_df.Score .>= 85,
+            "DoNothing",
+            "NeedsAction",
+        )
+    )
+end
+
+# ╔═╡ 139075ff-92d9-480a-b53b-4bca487b100f
+begin
+    # use partition to create train and test datasets
+    train_rows, test_rows = partition(
+        eachindex(y), # just says to use all rows
+        0.80; # 80/20 split between train and test
+        stratify = y, # keeps a region proportions similar between train and test
+        rng = 1234, # makes this repeatable
+    )
+end
+
+# ╔═╡ d05b79c4-0235-45a1-933d-c8147e7b0e0b
+md"""
+## Build the pipeline
+raw data
+    ->
+Standardizer()
+    ->
+ANN
+    ->
+probability of each decision region
+"""
+
+# ╔═╡ 3b280832-9ad9-437c-becd-e79eb3a51e91
+begin
+    # Deriving input and hidden layer sizes from feature selection
+    inputFeatures = length(feature_cols)
+    hiddenLayerNodes = inputFeatures * 2
+    learningRate = 0.001
+    hiddenLayers = (hiddenLayerNodes, hiddenLayerNodes, hiddenLayerNodes, inputFeatures)
+    
+    ann = MLJFlux.NeuralNetworkBinaryClassifier(
+        builder = MLJFlux.MLP(hidden = hiddenLayers),
+        optimiser = Optimisers.Adam(learningRate), #Adam optimizer with
+        batch_size = 32, # I'm not sure how this impacts the model
+        epochs = 150, # ~ nSteps
+        lambda = 1e-4, # regularization factor
+        rng = 1234, # for reproduceable results
+    )
+
+    # Standardize each feature before it reaches the ANN
+    # This basically equivalent to our x - mean(x) / std(x) that we used in the PCA
+    model = Standardizer() |> ann
+end
+
+# ╔═╡ d7f18f6d-7669-402c-8814-aa0d5a7c39d2
+begin
+    # Cross Validation (this trains the model on the selected training data)
+    # Resampling is doing 5 fold validation on training data
+
+    cv_results = evaluate(
+        model,
+        X[train_rows, :],
+        y[train_rows];
+        resampling = StratifiedCV(nfolds = 5, rng = 1234),
+        measure = log_loss,
+        verbosity = 0,
+    )
+
+    # Lower is better here, 0 is a perfect score
+    cv_results.measurement
+end
+
+# ╔═╡ 59bf7ef6-c3bf-4cf5-96ef-36335f333327
+md"""
+Because the ANN was formulated as a probabilistic binary classifier rather than a
+continuous score-regression model, performance was evaluated using log loss instead
+of RMSE. Log loss rewards models that assign high probability to the observed condition
+region and penalizes overconfident incorrect predictions. This emphasis on probability
+quality is appropriate because the predicted decision-region probabilities are intended
+to support later Value of Information calculations.
+"""
+
+# ╔═╡ bfe3596d-1e7d-4185-a30e-c1a67be1437e
+begin
+    # Testing the model against held out data
+
+    # Fit the model with all training data
+    mach = machine(model, X[train_rows, :], y[train_rows])
+    fit!(mach, verbosity = 0)
+
+    # Predict on held out test data
+    ŷ = MLJ.predict(mach, X[test_rows, :])
+
+    # calculate the log loss
+    # a result here that is close to the CV result indicates that the model performs as well on test data as it does on the training set.
+    test_log_loss = log_loss(ŷ, y[test_rows])
+
+    # Log loss here is measuring "Quality of predicted class probabilities"
+    # RSME is not appropriate for this type of model as it measures "error in predicted numeric value), but we are predicting P(scoreRegion) not the numeric score itself
+end
+
+# ╔═╡ f8b61b60-4229-465c-994d-1ddd42cfd267
+begin
+    p_do_nothing = pdf.(ŷ, "DoNothing")
+    p_needs_action = pdf.(ŷ, "NeedsAction")
+
+    results = DataFrame(
+        actual_score = model_df.Score[test_rows],
+        actual_class = string.(y[test_rows]),
+        p_do_nothing = p_do_nothing,
+        p_needs_action = p_needs_action,
+    )
+
+    # A simple 0.50 decision rule for now:
+    results.predicted_class = ifelse.(
+        results.p_needs_action .>= 0.50,
+        "NeedsAction",
+        "DoNothing",
+    )
+
+    results
+end
+
+# ╔═╡ 9c345444-d08d-4505-82f4-4a3cde530380
+countmap(y)
+
+# ╔═╡ d3e26b8b-af93-4411-9c1b-c748d1b5d0b0
+cv_results.measurement
+
+# ╔═╡ 35e64b37-084f-4698-9a18-6badc97c26d2
+test_log_loss
+
+# ╔═╡ 7dbc925c-4da9-4bba-9872-b784588925f2
+md"""
+The binary response variable was moderately imbalanced: 78.2% of boiler
+observations fell in the Do Nothing region and 21.8% fell in the Needs Action
+region. Therefore, accuracy alone was not considered sufficient for model
+evaluation because a model that always predicted the majority class would
+appear accurate while providing no component-specific risk information.
+
+The ANN achieved a mean five-fold cross-validation log loss of 0.399 and a
+held-out test log loss of 0.401. The close agreement between these values
+suggests that the estimated performance was reasonably stable across the
+random training, validation, and test partitions. Compared with a
+prevalence-only baseline model that assigned every observation the overall
+Needs Action probability, the ANN reduced log loss by approximately 23%.
+This indicates that the selected component-state and contextual predictors
+provided useful information for estimating the probability of an assessment
+falling below the maintenance decision threshold.
+"""
+
+# ╔═╡ e02c033f-ef23-4b32-817a-9ff5391ba7fa
+begin
+    p_baseline = mean(y[train_rows] .== "NeedsAction")
+
+    y_test_binary = y[test_rows] .== "NeedsAction"
+
+    baseline_test_log_loss = -mean(
+        ifelse.(
+            y_test_binary,
+            log(p_baseline),
+            log1p(-p_baseline),
+        )
+    )
+
+    (
+        p_baseline = p_baseline,
+        baseline_test_log_loss = baseline_test_log_loss,
+        ann_test_log_loss = test_log_loss,
+    )
+end
+
+# ╔═╡ cf9e632f-7903-44a0-91a8-be00716e149c
+md"""
+Using a 0.50 probability cutoff, the ANN correctly classified 83.5% of held-out
+test observations. The model achieved a precision of 71.3% for the Needs Action
+class, meaning that approximately seven of every ten observations predicted as
+requiring action were observed below the condition threshold. However, recall for
+the Needs Action class was 40.1%, indicating that the 0.50 cutoff identified fewer
+than half of the observations that actually fell below the threshold.
+
+This pattern indicates that the model was relatively conservative in assigning the
+Needs Action label. Because the intended application is assessment planning, the
+probability cutoff should ultimately be selected based on the relative consequences
+of missed action-needed components and unnecessary assessment prioritization rather
+than using 0.50 as an assumed operational threshold.
+"""
+
+# ╔═╡ 44b0287f-a0ab-4a50-9759-c710d1a83083
+begin
+    actual_needs = results.actual_class .== "NeedsAction"
+    predicted_needs = results.predicted_class .== "NeedsAction"
+
+    true_positive = sum(actual_needs .& predicted_needs)
+    false_negative = sum(actual_needs .& .!predicted_needs)
+    false_positive = sum(.!actual_needs .& predicted_needs)
+    true_negative = sum(.!actual_needs .& .!predicted_needs)
+
+    precision = true_positive / (true_positive + false_positive)
+    recall = true_positive / (true_positive + false_negative)
+    accuracy = (true_positive + true_negative) / nrow(results)
+
+    (
+        true_positive = true_positive,
+        false_negative = false_negative,
+        false_positive = false_positive,
+        true_negative = true_negative,
+        precision = precision,
+        recall = recall,
+        accuracy = accuracy,
+    )
+end
+
+# ╔═╡ 613283d8-962c-4b46-ac4d-548c2059c511
+begin
+    # Hold the best settings found so far constant:
+    hidden = (112,)
+    learning_rate = 0.001
+    lambda = 0.01
+    epochs = 150
+    batch_size = 32
+    optimiser = Optimisers.Adam(learning_rate)
+end
+
+# ╔═╡ eb08c937-ac10-4ce0-9474-c1b65900c48c
+function get_cv_log_loss(hidden_layers;
+    learning_rate = 0.001,
+    optimiser = nothing,
+    epochs = 150,
+    lambda = 1e-4,
+    batch_size = 32,
+)
+    selected_optimiser = isnothing(optimiser) ?
+        Optimisers.Adam(learning_rate) :
+        optimiser
+
+    ann = MLJFlux.NeuralNetworkBinaryClassifier(
+        builder = MLJFlux.MLP(hidden = hidden_layers),
+        optimiser = selected_optimiser,
+        batch_size = batch_size,
+        epochs = epochs,
+        lambda = lambda,
+        rng = 1234,
+    )
+
+    model = Standardizer() |> ann
+
+    cv_result = evaluate(
+        model,
+        X[train_rows, :],
+        y[train_rows];
+        resampling = StratifiedCV(nfolds = 5, rng = 1234),
+        measure = log_loss,
+        verbosity = 0,
+    )
+
+    return only(cv_result.measurement)
+end
+
+# ╔═╡ 1769db6e-35f5-4c79-82e0-6794ea11b347
+get_cv_log_loss(hidden; learning_rate, optimiser, epochs, lambda, batch_size)
+
+# ╔═╡ a1b1717b-c6eb-4b72-a0de-35972e8ea718
+function evaluate_feature_set(selected_feature_cols::AbstractVector{Symbol})
+
+    # Fixed hyperparameters selected from prior experiments
+    hidden = (112,)
+    learning_rate = 0.001
+    lambda = 0.01
+    epochs = 150
+    batch_size = 32
+    optimiser = Optimisers.Adam(learning_rate)
+
+    # Fixed modeling choices
+    score_threshold = 85.0
+    probability_cutoff = 0.50
+    rng_seed = 1234
+
+    # Build the selected dataset
+    model_df = dropmissing(
+        select(wrangled_boilers, vcat(selected_feature_cols, [:Score]))
+    )
+
+    X = Float32.(select(model_df, selected_feature_cols))
+
+    y = categorical(
+        ifelse.(
+            model_df.Score .>= score_threshold,
+            "DoNothing",
+            "NeedsAction",
+        )
+    )
+
+    # Repeatable stratified train/test split
+    train_rows, test_rows = partition(
+        eachindex(y),
+        0.80;
+        stratify = y,
+        rng = rng_seed,
+    )
+
+    # Standardization + ANN pipeline
+    ann = MLJFlux.NeuralNetworkBinaryClassifier(
+        builder = MLJFlux.MLP(hidden = hidden),
+        optimiser = optimiser,
+        batch_size = batch_size,
+        epochs = epochs,
+        lambda = lambda,
+        rng = rng_seed,
+    )
+
+    model = Standardizer() |> ann
+
+    # Five-fold cross-validation on training rows
+    cv_results = evaluate(
+        model,
+        X[train_rows, :],
+        y[train_rows];
+        resampling = StratifiedCV(nfolds = 5, rng = rng_seed),
+        measure = log_loss,
+        verbosity = 0,
+    )
+
+    cv_log_loss = only(cv_results.measurement)
+
+    # Fit full training subset
+    mach = machine(model, X[train_rows, :], y[train_rows])
+    fit!(mach, verbosity = 0)
+
+    # Predict held-out test subset
+    yhat = MLJ.predict(mach, X[test_rows, :])
+
+    test_log_loss = log_loss(yhat, y[test_rows])
+
+    p_do_nothing = pdf.(yhat, "DoNothing")
+    p_needs_action = pdf.(yhat, "NeedsAction")
+
+    # Row-level test results for plots and inspection
+    results = DataFrame(
+        actual_score = model_df.Score[test_rows],
+        actual_class = string.(y[test_rows]),
+        p_do_nothing = p_do_nothing,
+        p_needs_action = p_needs_action,
+    )
+
+    results.predicted_class = ifelse.(
+        results.p_needs_action .>= probability_cutoff,
+        "NeedsAction",
+        "DoNothing",
+    )
+
+    # Prevalence-only probability baseline
+    p_baseline = mean(y[train_rows] .== "NeedsAction")
+
+    actual_needs = results.actual_class .== "NeedsAction"
+
+    baseline_test_log_loss = -mean(
+        ifelse.(
+            actual_needs,
+            log(p_baseline),
+            log1p(-p_baseline),
+        )
+    )
+
+    # Metrics at the default 0.50 cutoff
+    predicted_needs = results.p_needs_action .>= probability_cutoff
+
+    true_positive = sum(actual_needs .& predicted_needs)
+    false_negative = sum(actual_needs .& .!predicted_needs)
+    false_positive = sum(.!actual_needs .& predicted_needs)
+    true_negative = sum(.!actual_needs .& .!predicted_needs)
+
+    precision = true_positive + false_positive == 0 ?
+        NaN :
+        true_positive / (true_positive + false_positive)
+
+    recall = true_positive + false_negative == 0 ?
+        NaN :
+        true_positive / (true_positive + false_negative)
+
+    accuracy = (true_positive + true_negative) / length(actual_needs)
+
+    # Metrics across a range of probability cutoffs
+    cutoff_summaries = NamedTuple[]
+
+    for cutoff in 0.10:0.10:0.90
+        cutoff_predicted_needs = results.p_needs_action .>= cutoff
+
+        tp = sum(actual_needs .& cutoff_predicted_needs)
+        fn = sum(actual_needs .& .!cutoff_predicted_needs)
+        fp = sum(.!actual_needs .& cutoff_predicted_needs)
+        tn = sum(.!actual_needs .& .!cutoff_predicted_needs)
+
+        cutoff_precision = tp + fp == 0 ? NaN : tp / (tp + fp)
+        cutoff_recall = tp + fn == 0 ? NaN : tp / (tp + fn)
+        cutoff_accuracy = (tp + tn) / length(actual_needs)
+
+        push!(
+            cutoff_summaries,
+            (
+                cutoff = cutoff,
+                true_positive = tp,
+                false_negative = fn,
+                false_positive = fp,
+                true_negative = tn,
+                precision = cutoff_precision,
+                recall = cutoff_recall,
+                accuracy = cutoff_accuracy,
+                flagged_fraction = mean(cutoff_predicted_needs),
+            ),
+        )
+    end
+
+    cutoff_results = DataFrame(cutoff_summaries)
+
+    summary = (
+        features = join(string.(selected_feature_cols), ", "),
+        n_features = length(selected_feature_cols),
+        n_observations = nrow(model_df),
+        cv_log_loss = cv_log_loss,
+        test_log_loss = test_log_loss,
+        p_baseline = p_baseline,
+        baseline_test_log_loss = baseline_test_log_loss,
+        ann_test_log_loss = test_log_loss,
+        precision = precision,
+        recall = recall,
+        accuracy = accuracy,
+    )
+
+    return (
+        summary = summary,
+        results = results,
+        cutoff_results = cutoff_results,
+    )
+end
+
+# ╔═╡ e2f6d11f-b1d4-4cd8-ade9-d0b8215acc27
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+    # current benchmark with all features excluding percent green = 0.383320
+    # current benchmark with all features including percent green = 0.381805
+    # current benchmark with all features including all available = 0.388872
+    # all features less Qty, assetAge, AssetDesignLife           = 0.379156
+    # all features less Recency, Qty, assetAge, AssetDesignLife   = 0.381559
+    # all features less Qty, assetAge, AssetDesignLife, PercentG  = 0.377854
+   
+	cols = [
+        :RSL,
+        :NormalizedAge,
+        :EffectiveAge,
+        :PredictedCI,  # Might be useful paired with RSL for some reason
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,  # Best performing between Recency/PrevScore/PrevAssessed
+        #:Qty,
+        :NormalizedAssetAge,
+        #:AssetAge,
+        #:AssetDesignLife,
+        :MonthSin,
+        :MonthCos,
+        :LogCRV,  # Currently divided by Qty to normalize individual boiler cost
+        :Climate,
+        #:PercentGreen
+    ]
+    evaluate_feature_set(cols)
+end
+  ╠═╡ =#
+
+# ╔═╡ 3cde7233-438d-4cb4-aeac-ef6cadb7e22d
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+    # Current best feature set is included as experiment 1:
+    current_best_cols = [
+        :RSL,
+        :NormalizedAge,
+        :EffectiveAge,
+        :PredictedCI,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :NormalizedAssetAge,
+        :MonthSin,
+        :MonthCos,
+        :LogCRV,
+        :Climate,
+    ]
+
+    # Candidate variables for random feature-set generation:
+    candidate_features = [
+        :RSL,
+        :NormalizedAge,
+        :EffectiveAge,
+        :PredictedCI,
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,
+        :Qty,
+        :NormalizedAssetAge,
+        :AssetAge,
+        :AssetDesignLife,
+        :MonthSin,
+        :MonthCos,
+        :LogCRV,
+        :Climate,
+        :PercentGreen,
+    ]
+
+    number_of_feature_sets = 100
+    rng = Random.MersenneTwister(1234)
+
+    # Build unique feature combinations:
+    feature_sets = Vector{Vector{Symbol}}()
+    seen_feature_sets = Set{Tuple}()
+
+    push!(feature_sets, current_best_cols)
+    push!(seen_feature_sets, Tuple(current_best_cols))
+
+    while length(feature_sets) < number_of_feature_sets
+        n_selected = Random.rand(rng, 2:length(candidate_features))
+
+        selected_indices = sort(
+            Random.randperm(rng, length(candidate_features))[1:n_selected]
+        )
+
+        selected_cols = candidate_features[selected_indices]
+        feature_key = Tuple(selected_cols)
+
+        if !(feature_key in seen_feature_sets)
+            push!(feature_sets, selected_cols)
+            push!(seen_feature_sets, feature_key)
+        end
+    end
+
+    # Run the ANN workflow for every feature set:
+    feature_sweep_summaries = NamedTuple[]
+
+    for (i, selected_cols) in enumerate(feature_sets)
+        @info "Testing feature set $i / $number_of_feature_sets ($(length(selected_cols)) features)"
+
+        summary = evaluate_feature_set(selected_cols)
+
+        push!(
+            feature_sweep_summaries,
+            merge(summary, (experiment = i,)),
+        )
+    end
+
+    feature_sweep_results = DataFrame(feature_sweep_summaries)
+
+    sort!(feature_sweep_results, :cv_log_loss)
+end
+  ╠═╡ =#
+
+# ╔═╡ 661416fe-494a-4057-ab7b-8b1bf6173a9e
+function evaluate_pca_feature_set(
+    selected_feature_cols::AbstractVector{Symbol},
+    n_pcs::Int,
+)
+    # Fixed hyperparameters selected from prior experiments
+    hidden = (112,)
+    learning_rate = 0.001
+    lambda = 0.01
+    epochs = 150
+    batch_size = 32
+    optimiser = Optimisers.Adam(learning_rate)
+
+    # Fixed modeling choices
+    score_threshold = 85.0
+    probability_cutoff = 0.50
+    rng_seed = 1234
+
+    # Ensure PCA dimension is valid for the selected feature set
+    @assert 1 <= n_pcs <= length(selected_feature_cols)
+
+    # Build selected dataset
+    model_df = dropmissing(
+        select(wrangled_boilers, vcat(selected_feature_cols, [:Score]))
+    )
+
+    X = Float32.(select(model_df, selected_feature_cols))
+
+    y = categorical(
+        ifelse.(
+            model_df.Score .>= score_threshold,
+            "DoNothing",
+            "NeedsAction",
+        )
+    )
+
+    # Repeatable stratified train/test split
+    train_rows, test_rows = partition(
+        eachindex(y),
+        0.80;
+        stratify = y,
+        rng = rng_seed,
+    )
+
+    # PCA after standardization
+    pca = PCA_model(
+        maxoutdim = n_pcs,
+        variance_ratio = 1.0,
+        mean = 0,
+    )
+
+    ann = MLJFlux.NeuralNetworkBinaryClassifier(
+        builder = MLJFlux.MLP(hidden = hidden),
+        optimiser = optimiser,
+        batch_size = batch_size,
+        epochs = epochs,
+        lambda = lambda,
+        rng = rng_seed,
+    )
+
+    model = Standardizer() |> pca |> ann
+
+    # Five-fold CV on training data
+    cv_results = evaluate(
+        model,
+        X[train_rows, :],
+        y[train_rows];
+        resampling = StratifiedCV(nfolds = 5, rng = rng_seed),
+        measure = log_loss,
+        verbosity = 0,
+    )
+
+    cv_log_loss = only(cv_results.measurement)
+
+    # Fit full training data and evaluate test data
+    mach = machine(model, X[train_rows, :], y[train_rows])
+    fit!(mach, verbosity = 0)
+
+    yhat = MLJ.predict(mach, X[test_rows, :])
+
+    test_log_loss = log_loss(yhat, y[test_rows])
+
+    # Prevalence baseline
+    p_baseline = mean(y[train_rows] .== "NeedsAction")
+    actual_needs = y[test_rows] .== "NeedsAction"
+
+    baseline_test_log_loss = -mean(
+        ifelse.(
+            actual_needs,
+            log(p_baseline),
+            log1p(-p_baseline),
+        )
+    )
+
+    # Extract NeedsAction probability
+    p_needs_action = pdf.(yhat, "NeedsAction")
+
+    # Metrics at 0.50 probability cutoff
+    predicted_needs = p_needs_action .>= probability_cutoff
+
+    true_positive = sum(actual_needs .& predicted_needs)
+    false_negative = sum(actual_needs .& .!predicted_needs)
+    false_positive = sum(.!actual_needs .& predicted_needs)
+    true_negative = sum(.!actual_needs .& .!predicted_needs)
+
+    precision = true_positive + false_positive == 0 ?
+        NaN :
+        true_positive / (true_positive + false_positive)
+
+    recall = true_positive + false_negative == 0 ?
+        NaN :
+        true_positive / (true_positive + false_negative)
+
+    accuracy = (true_positive + true_negative) / length(actual_needs)
+
+    return (
+        features = join(string.(selected_feature_cols), ", "),
+        n_features = length(selected_feature_cols),
+        n_pcs = n_pcs,
+        n_observations = nrow(model_df),
+        cv_log_loss = cv_log_loss,
+        test_log_loss = test_log_loss,
+        p_baseline = p_baseline,
+        baseline_test_log_loss = baseline_test_log_loss,
+        ann_test_log_loss = test_log_loss,
+        precision = precision,
+        recall = recall,
+        accuracy = accuracy,
+    )
+end
+
+# ╔═╡ 49ba444f-c820-469b-98e3-8d11f61b5229
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+	pcacols = [
+        :RSL,
+        :NormalizedAge,
+        :EffectiveAge,
+        :PredictedCI,  # Might be useful paired with RSL for some reason
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,  # Best performing between Recency/PrevScore/PrevAssessed
+        #:Qty,
+        :NormalizedAssetAge,
+        #:AssetAge,
+        #:AssetDesignLife,
+        :MonthSin,
+        :MonthCos,
+        :LogCRV,  # Currently divided by Qty to normalize individual boiler cost
+        :Climate,
+        #:PercentGreen
+    ]
+
+    npcs = 6
+    evaluate_pca_feature_set(pcacols, npcs)
+end
+  ╠═╡ =#
+
+# ╔═╡ f5353a5f-ff02-4d3c-81d1-b54355d898f7
+function plot_ann_results(
+    results::DataFrame,
+    cutoff_results::DataFrame;
+    n_calibration_bins = 10,
+    probability_cutoff = 0.50,
+    seed = 1234,
+)
+    probabilities = results.p_needs_action
+    actual_needs = results.actual_class .== "NeedsAction"
+
+    # ------------------------------------------------------------
+    # Plot 1: Predicted probability distributions by actual class
+    # ------------------------------------------------------------
+    p_do_nothing = probabilities[.!actual_needs]
+    p_needs_action = probabilities[actual_needs]
+
+    probability_plot = histogram(
+        p_do_nothing;
+        bins = range(0, 1; length = 21),
+        normalize = :probability,
+        alpha = 0.55,
+        color = :steelblue,
+        label = "Observed DoNothing",
+        xlabel = "Predicted P(NeedsAction)",
+        ylabel = "Proportion Within Observed Class",
+        #title = "Predicted Probability by Observed Region",
+        xlims = (0, 1),
+        legend = :topright,
+
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+        legendfontsize = 20,
+
+        size = (1200, 1000),
+        dpi = 200,
+
+        left_margin = 28mm,
+        bottom_margin = 20mm,
+        top_margin = 14mm,
+        right_margin = 18mm,
+    )
+
+    histogram!(
+        probability_plot,
+        p_needs_action;
+        bins = range(0, 1; length = 21),
+        normalize = :probability,
+        alpha = 0.55,
+        color = :darkorange,
+        label = "Observed NeedsAction",
+    )
+
+    # ------------------------------------------------------------
+    # Plot 2: Calibration / reliability plot
+    # ------------------------------------------------------------
+    bin_id = [
+        min(floor(Int, p * n_calibration_bins) + 1, n_calibration_bins)
+        for p in probabilities
+    ]
+
+    calibration_data = DataFrame(
+        bin = bin_id,
+        predicted_probability = probabilities,
+        actual_needs_action = Float64.(actual_needs),
+    )
+
+    calibration_summary = combine(
+        groupby(calibration_data, :bin),
+        :predicted_probability => mean => :mean_predicted_probability,
+        :actual_needs_action => mean => :observed_needs_action_rate,
+        nrow => :n_observations,
+    )
+
+    sort!(calibration_summary, :mean_predicted_probability)
+
+    calibration_plot = scatter(
+        calibration_summary.mean_predicted_probability,
+        calibration_summary.observed_needs_action_rate;
+        color = :purple,
+        markersize = 7,
+        markerstrokewidth = 0,
+        label = "Observed Rate by Prediction Bin",
+        xlabel = "Mean Predicted P(NeedsAction)",
+        ylabel = "Observed NeedsAction Rate",
+        #title = "Calibration of Predicted Probabilities",
+        xlims = (0, 1),
+        ylims = (0, 1),
+        legend = :topleft,
+
+        titlefontsize = 38,
+        guidefontsize = 30,
+        tickfontsize = 24,
+        legendfontsize = 18,
+
+        size = (1250, 1050),
+        dpi = 200,
+        aspect_ratio = :equal,
+
+        left_margin = 28mm,
+        bottom_margin = 20mm,
+        top_margin = 14mm,
+        right_margin = 20mm,
+    )
+
+    plot!(
+        calibration_plot,
+        [0, 1],
+        [0, 1];
+        color = :black,
+        linestyle = :dash,
+        linewidth = 3,
+        label = "Perfect Calibration",
+    )
+
+    # ------------------------------------------------------------
+    # Plot 3: Cutoff tradeoff plot
+    # ------------------------------------------------------------
+    cutoff_plot_data = sort(cutoff_results, :cutoff)
+
+    cutoff_plot = plot(
+        cutoff_plot_data.cutoff,
+        cutoff_plot_data.precision;
+        color = :forestgreen,
+        marker = :circle,
+        markersize = 6,
+        linewidth = 3,
+        label = "Correctly Flagged Rate",
+        xlabel = "P(NeedsAction) Cutoff",
+        ylabel = "Metric Value",
+        #title = "Assessment Selection Tradeoff",
+        xlims = (0, 1),
+        ylims = (0, 1),
+        legend = :right,
+
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+        legendfontsize = 18,
+
+        size = (1200, 1000),
+        dpi = 200,
+
+        left_margin = 28mm,
+        bottom_margin = 20mm,
+        top_margin = 14mm,
+        right_margin = 42mm,
+    )
+
+    plot!(
+        cutoff_plot,
+        cutoff_plot_data.cutoff,
+        cutoff_plot_data.recall;
+        color = :darkorange,
+        marker = :circle,
+        markersize = 6,
+        linewidth = 3,
+        label = "NeedsAction Detection Rate",
+    )
+
+    plot!(
+        cutoff_plot,
+        cutoff_plot_data.cutoff,
+        cutoff_plot_data.flagged_fraction;
+        color = :steelblue,
+        marker = :circle,
+        markersize = 6,
+        linewidth = 3,
+        label = "Assessment-Priority Rate",
+    )
+
+    # ------------------------------------------------------------
+    # Plot 4: All individual predictions and observed outcomes
+    # ------------------------------------------------------------
+    rng = Random.MersenneTwister(seed)
+
+    y_actual = Float64.(actual_needs)
+
+    y_jitter = y_actual .+ 0.18 .* (
+        Random.rand(rng, length(y_actual)) .- 0.5
+    )
+
+    all_predictions_plot = scatter(
+        probabilities[.!actual_needs],
+        y_jitter[.!actual_needs];
+        color = :steelblue,
+        alpha = 0.25,
+        markersize = 3,
+        markerstrokewidth = 0,
+        label = "Observed DoNothing",
+        xlabel = "Predicted P(NeedsAction)",
+        ylabel = "Observed Assessment Region",
+        yticks = (
+            [0.0, 1.0],
+            ["DoNothing", "NeedsAction"],
+        ),
+        xlims = (0, 1),
+        ylims = (-0.2, 1.2),
+        #title = "All Held-Out ANN Predictions",
+        legend = :topright,
+
+        titlefontsize = 40,
+        guidefontsize = 30,
+        tickfontsize = 24,
+        legendfontsize = 18,
+
+        size = (1500, 950),
+        dpi = 200,
+
+        left_margin = 30mm,
+        bottom_margin = 20mm,
+        top_margin = 14mm,
+        right_margin = 22mm,
+    )
+
+    scatter!(
+        all_predictions_plot,
+        probabilities[actual_needs],
+        y_jitter[actual_needs];
+        color = :darkorange,
+        alpha = 0.25,
+        markersize = 3,
+        markerstrokewidth = 0,
+        label = "Observed NeedsAction",
+    )
+
+    vline!(
+        all_predictions_plot,
+        [probability_cutoff];
+        color = :black,
+        linestyle = :dash,
+        linewidth = 3,
+        label = "Cutoff = $probability_cutoff",
+    )
+
+    return (
+        probability_plot,
+        calibration_plot,
+        cutoff_plot,
+        all_predictions_plot,
+    )
+end
+
+# ╔═╡ d1ce4302-d470-42d2-923f-a27aa37a411e
+begin
+    final_cols = [
+        :RSL,
+        :NormalizedAge,
+        :EffectiveAge,
+        :PredictedCI,  # Might be useful paired with RSL for some reason
+        :Recency,
+        :PrevScore,
+        :PrevAssessed,  # Best performing between Recency/PrevScore/PrevAssessed
+        #:Qty,
+        :NormalizedAssetAge,
+        #:AssetAge,
+        #:AssetDesignLife,
+        :MonthSin,
+        :MonthCos,
+        :LogCRV,  # Currently divided by Qty to normalize individual boiler cost
+        :Climate,
+        #:PercentGreen
+    ]
+
+    final_run = evaluate_feature_set(final_cols)
+    p1, p2, p3, p4 = plot_ann_results(
+        final_run.results,
+        final_run.cutoff_results,
+    )
+
+    #savefig(p1, "ANN_Probabilities_By_Region.png")
+    #savefig(p2, "ANN_Prediction_Reliabilty.png")
+    #savefig(p3, "ANN_Cutoff_Tradeoff.png")
+end
+
+# ╔═╡ d3b4eed4-e5f1-4cdf-b8ca-88c66c9edb43
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+    architectures = Tuple[
+        # 2 total layers: 1 hidden layer
+        (8,),
+        (16,),
+        (24,),
+        (32,),
+        (48,),
+        (64,),
+        (80,),
+        (96,),
+        (112,),
+        (124,),
+    
+        # 3 total layers: 2 hidden layers
+        (8, 8),
+        (16, 8),
+        (16, 16),
+        (32, 16),
+        (32, 32),
+        (48, 24),
+        (64, 32),
+        (64, 64),
+        (96, 48),
+        (124, 64),
+    
+        # 4 total layers: 3 hidden layers
+        (8, 8, 8),
+        (16, 8, 8),
+        (16, 16, 8),
+        (32, 16, 8),
+        (32, 32, 16),
+        (48, 24, 12),
+        (64, 32, 16),
+        (64, 64, 32),
+        (96, 48, 24),
+        (124, 64, 32),
+    
+        # 5 total layers: 4 hidden layers
+        (8, 8, 8, 8),
+        (16, 8, 8, 8),
+        (16, 16, 8, 8),
+        (32, 16, 8, 8),
+        (32, 32, 16, 8),
+        (48, 24, 12, 8),
+        (64, 32, 16, 8),
+        (64, 64, 32, 16),
+        (96, 48, 24, 12),
+        (124, 64, 32, 16),
+    ]
+    
+    architecture_results = DataFrame(
+        hidden = string.(architectures),
+        hidden_layers = length.(architectures),
+        total_layers = length.(architectures) .+ 1,
+        cv_log_loss = fill(NaN, length(architectures)),
+    )
+
+    for (i, hidden_layers) in enumerate(architectures)
+        @info "Testing architecture $i / $(length(architectures)): $hidden_layers"
+    
+        architecture_results.cv_log_loss[i] =
+            get_cv_log_loss(hidden_layers)
+    end
+    
+    sort!(architecture_results, :cv_log_loss)
+end
+  ╠═╡ =#
+
+# ╔═╡ 920b4200-3b99-48e9-906e-d637bfdacb08
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+    # Include some deliberately very small and very large learning rates:
+    learning_rates = [
+        1e-5,
+        3e-5,
+        1e-4,
+        3e-4,
+        1e-3,
+        3e-3,
+        1e-2,
+        3e-2,
+        1e-1,
+    ]
+
+    learning_rate_results = DataFrame(
+        learning_rate = learning_rates,
+        cv_log_loss = fill(Inf, length(learning_rates)),
+        status = fill("Not run", length(learning_rates)),
+    )
+
+    for (i, learning_rate) in enumerate(learning_rates)
+        @info "Testing learning rate $i / $(length(learning_rates)): $learning_rate"
+
+        try
+            loss = get_cv_log_loss(
+                hidden_layers;
+                learning_rate = learning_rate,
+                epochs = epochs,
+                lambda = lambda,
+                batch_size = batch_size,
+            )
+
+            if isfinite(loss)
+                learning_rate_results.cv_log_loss[i] = loss
+                learning_rate_results.status[i] = "OK"
+            else
+                learning_rate_results.status[i] = "Non-finite loss"
+            end
+
+        catch err
+            learning_rate_results.status[i] = sprint(showerror, err)
+        end
+    end
+
+    sort!(learning_rate_results, :cv_log_loss)
+end
+  ╠═╡ =#
+
+# ╔═╡ 31d24c17-120a-4996-9d97-df960ef02a04
+#=╠═╡
+sort!(learning_rate_results, :cv_log_loss)
+  ╠═╡ =#
+
+# ╔═╡ e03990da-c44e-4bc5-bb1c-a183fe838ac4
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+    # Sweep regularization strength:
+    lambdas = [
+        0.0,
+        1e-7,
+        3e-7,
+        1e-6,
+        3e-6,
+        1e-5,
+        3e-5,
+        1e-4,
+        3e-4,
+        1e-3,
+        3e-3,
+        1e-2,
+    ]
+
+    regularization_results = DataFrame(
+        lambda = lambdas,
+        cv_log_loss = fill(Inf, length(lambdas)),
+        status = fill("Not run", length(lambdas)),
+    )
+
+    for (i, lambda) in enumerate(lambdas)
+        @info "Testing lambda $i / $(length(lambdas)): $lambda"
+
+        try
+            loss = get_cv_log_loss(
+                hidden_layers;
+                learning_rate = learning_rate,
+                epochs = epochs,
+                lambda = lambda,
+                batch_size = batch_size,
+            )
+
+            if isfinite(loss)
+                regularization_results.cv_log_loss[i] = loss
+                regularization_results.status[i] = "OK"
+            else
+                regularization_results.status[i] = "Non-finite loss"
+            end
+
+        catch err
+            regularization_results.status[i] = sprint(showerror, err)
+        end
+    end
+
+    sort!(regularization_results, :cv_log_loss)
+end
+  ╠═╡ =#
+
+# ╔═╡ 1b022b5f-635e-446a-9fb5-a7fdac9f1a7e
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+    optimizer_names = [
+        "Adam(0.001)",
+        "RAdam(0.001)",
+        "NAdam(0.001)",
+        "AMSGrad(0.001)",
+        "AdaMax(0.001)",
+        "RMSProp(0.001)",
+        "Momentum(0.01, 0.9)",
+        "Nesterov(0.01, 0.9)",
+        "Descent(0.01)",
+        "AdaGrad(0.1)",
+    ]
+
+    optimizers = Any[
+        Optimisers.Adam(0.001),
+        Optimisers.RAdam(0.001),
+        Optimisers.NAdam(0.001),
+        Optimisers.AMSGrad(0.001),
+        Optimisers.AdaMax(0.001),
+        Optimisers.RMSProp(0.001),
+        Optimisers.Momentum(0.01, 0.9),
+        Optimisers.Nesterov(0.01, 0.9),
+        Optimisers.Descent(0.01),
+        Optimisers.AdaGrad(0.1),
+    ]
+
+    optimizer_results = DataFrame(
+        optimizer = optimizer_names,
+        cv_log_loss = fill(Inf, length(optimizers)),
+        status = fill("Not run", length(optimizers)),
+    )
+
+    for i in eachindex(optimizers)
+        @info "Testing optimizer $i / $(length(optimizers)): $(optimizer_names[i])"
+
+        try
+            loss = get_cv_log_loss(
+                hidden;
+                optimiser = optimizers[i],
+                epochs = epochs,
+                lambda = lambda,
+                batch_size = batch_size,
+            )
+
+            if isfinite(loss)
+                optimizer_results.cv_log_loss[i] = loss
+                optimizer_results.status[i] = "OK"
+            else
+                optimizer_results.status[i] = "Non-finite loss"
+            end
+
+        catch err
+            optimizer_results.status[i] = sprint(showerror, err)
+        end
+    end
+
+    sort!(optimizer_results, :cv_log_loss)
+end
+  ╠═╡ =#
+
+# ╔═╡ d978e03b-5188-41a3-ba0e-1586f049659f
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+    epoch_values = [
+        10,
+        25,
+        50,
+        100,
+        150,
+        250,
+        400,
+        600,
+    ]
+
+    epoch_results = DataFrame(
+        epochs = epoch_values,
+        cv_log_loss = fill(Inf, length(epoch_values)),
+        status = fill("Not run", length(epoch_values)),
+    )
+
+    for (i, epochs) in enumerate(epoch_values)
+        @info "Testing epochs $i / $(length(epoch_values)): $epochs"
+
+        try
+            loss = get_cv_log_loss(
+                hidden;
+                optimiser = optimiser,
+                epochs = epochs,
+                lambda = lambda,
+                batch_size = batch_size,
+            )
+
+            if isfinite(loss)
+                epoch_results.cv_log_loss[i] = loss
+                epoch_results.status[i] = "OK"
+            else
+                epoch_results.status[i] = "Non-finite loss"
+            end
+
+        catch err
+            epoch_results.status[i] = sprint(showerror, err)
+        end
+    end
+
+    sort!(epoch_results, :cv_log_loss)
+end
+  ╠═╡ =#
+
+# ╔═╡ 96546945-c144-4d79-85dc-780eb6aac97f
+# ╠═╡ disabled = true
+#=╠═╡
+begin
+    batch_sizes = [
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512,
+        1024,
+        4096,
+    ]
+
+    batch_results = DataFrame(
+        batch_size = batch_sizes,
+        cv_log_loss = fill(Inf, length(batch_sizes)),
+        status = fill("Not run", length(batch_sizes)),
+    )
+
+    for (i, batch_size) in enumerate(batch_sizes)
+        @info "Testing batch size $i / $(length(batch_sizes)): $batch_size"
+
+        try
+            loss = get_cv_log_loss(
+                hidden;
+                optimiser = optimiser,
+                epochs = epochs,
+                lambda = lambda,
+                batch_size = batch_size,
+            )
+
+            if isfinite(loss)
+                batch_results.cv_log_loss[i] = loss
+                batch_results.status[i] = "OK"
+            else
+                batch_results.status[i] = "Non-finite loss"
+            end
+
+        catch err
+            batch_results.status[i] = sprint(showerror, err)
+        end
+    end
+
+    sort!(batch_results, :cv_log_loss)
+
+    batch_results
+end
+  ╠═╡ =#
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MLJ = "add582a8-e3ab-11e8-2d5e-e98b27df1bc7"
+MLJFlux = "094fc8d1-fd35-5302-93ea-dabda2abf845"
+MLJMultivariateStatsInterface = "1b6a4a23-ba22-4f51-9698-8599985d3728"
+Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
@@ -337,6 +1767,11 @@ StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
 [compat]
 CSV = "~0.10.17"
 DataFrames = "~1.8.2"
+Flux = "~0.16.11"
+MLJ = "~0.23.3"
+MLJFlux = "~0.6.8"
+MLJMultivariateStatsInterface = "~0.5.4"
+Optimisers = "~0.4.9"
 StatsBase = "~0.34.13"
 StatsPlots = "~0.15.8"
 """
@@ -347,7 +1782,25 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.12.7"
 manifest_format = "2.0"
-project_hash = "33755c01c5884f995ef8d14402809ecd8d376a8b"
+project_hash = "c0497b82795403ef95e74366791b804117552164"
+
+[[deps.ADTypes]]
+deps = ["PrecompileTools"]
+git-tree-sha1 = "629de23e1c16911b439dabd2303c08af9575b226"
+uuid = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+version = "1.24.0"
+weakdeps = ["ChainRulesCore", "ConstructionBase", "EnzymeCore"]
+
+    [deps.ADTypes.extensions]
+    ADTypesChainRulesCoreExt = "ChainRulesCore"
+    ADTypesConstructionBaseExt = "ConstructionBase"
+    ADTypesEnzymeCoreExt = "EnzymeCore"
+
+[[deps.ARFFFiles]]
+deps = ["CategoricalArrays", "Dates", "OrderedCollections", "Parsers", "Tables"]
+git-tree-sha1 = "829b16815b5594d8d66b3fddb4eca193a2c3db84"
+uuid = "da404889-ca92-49ff-9e8b-0aa6b4d38dc8"
+version = "1.6.2"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -367,9 +1820,9 @@ version = "0.4.5"
 
 [[deps.Accessors]]
 deps = ["CompositionsBase", "ConstructionBase", "Dates", "InverseFunctions", "MacroTools"]
-git-tree-sha1 = "7063ad1083578215c7c4bf410368150abe8d5524"
+git-tree-sha1 = "8c0bc12397dabf5d2dfc4b5763ec463854cc44d3"
 uuid = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
-version = "0.1.45"
+version = "0.1.46"
 
     [deps.Accessors.extensions]
     AxisKeysExt = "AxisKeys"
@@ -426,21 +1879,61 @@ version = "3.5.2+0"
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 version = "1.11.0"
 
+[[deps.Atomix]]
+deps = ["UnsafeAtomics"]
+git-tree-sha1 = "1bbcf97714051f302b3beafab65bcdeb6044c4df"
+uuid = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
+version = "1.2.1"
+
+    [deps.Atomix.extensions]
+    AtomixCUDAExt = "CUDA"
+    AtomixMetalExt = "Metal"
+    AtomixOpenCLExt = "OpenCL"
+    AtomixoneAPIExt = "oneAPI"
+
+    [deps.Atomix.weakdeps]
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+    OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2"
+    oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
+
 [[deps.AxisAlgorithms]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "WoodburyMatrices"]
 git-tree-sha1 = "01b8ccb13d68535d73d2b0c23e39bd23155fb712"
 uuid = "13072b0f-2c55-5437-9ae7-d433b7a33950"
 version = "1.1.0"
 
+[[deps.BFloat16s]]
+deps = ["LinearAlgebra", "Printf", "Random"]
+git-tree-sha1 = "e386db8b4753b42caac75ac81d0a4fe161a68a97"
+uuid = "ab4f0b2a-ad5b-11e8-123f-65d77653426b"
+version = "0.6.1"
+
+[[deps.BSON]]
+git-tree-sha1 = "4c3e506685c527ac6a54ccc0c8c76fd6f91b42fb"
+uuid = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
+version = "0.3.9"
+
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 version = "1.11.0"
+
+[[deps.BitBasis]]
+deps = ["LinearAlgebra", "StaticArrays"]
+git-tree-sha1 = "89dc08420d4f593ff30f02611d136b475a5eb43d"
+uuid = "50ba71b6-fa0f-514d-ae9a-0916efc90dcf"
+version = "0.9.10"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "1b96ea4a01afe0ea4090c5c8039690672dd13f2e"
 uuid = "6e34b625-4abd-537c-b88f-471c36dfa7a0"
 version = "1.0.9+0"
+
+[[deps.CEnum]]
+git-tree-sha1 = "389ad5c84de1ae7cf0e28e381131c98ea87d54fc"
+uuid = "fa961155-64e5-5f13-b03f-caf6b980ea82"
+version = "0.5.0"
 
 [[deps.CSV]]
 deps = ["CodecZlib", "Dates", "FilePathsBase", "InlineStrings", "Mmap", "Parsers", "PooledArrays", "PrecompileTools", "SentinelArrays", "Tables", "Unicode", "WeakRefStrings", "WorkerUtilities"]
@@ -454,6 +1947,52 @@ git-tree-sha1 = "1fa950ebc3e37eccd51c6a8fe1f92f7d86263522"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.18.7+0"
 
+[[deps.Calculus]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "9cb23bbb1127eefb022b022481466c0f1127d430"
+uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
+version = "0.5.2"
+
+[[deps.CategoricalArrays]]
+deps = ["Compat", "DataAPI", "Future", "Missings", "Printf", "Requires", "Statistics", "Unicode"]
+git-tree-sha1 = "20ff1463035a170b25eba2ef9823bb9ad51635e4"
+uuid = "324d7699-5711-5eae-9e2f-1d82baa6b597"
+version = "1.1.1"
+
+    [deps.CategoricalArrays.extensions]
+    CategoricalArraysArrowExt = "Arrow"
+    CategoricalArraysJSONExt = "JSON"
+    CategoricalArraysRecipesBaseExt = "RecipesBase"
+    CategoricalArraysSentinelArraysExt = "SentinelArrays"
+    CategoricalArraysStatsBaseExt = "StatsBase"
+    CategoricalArraysStructTypesExt = "StructTypes"
+
+    [deps.CategoricalArrays.weakdeps]
+    Arrow = "69666777-d1a9-59fb-9406-91d4454c9d45"
+    JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+    RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
+    SentinelArrays = "91c51154-3ec4-41a3-a24f-3f23e20d615c"
+    StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+    StructTypes = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
+
+[[deps.CategoricalDistributions]]
+deps = ["CategoricalArrays", "Distributions", "Missings", "OrderedCollections", "Random", "Reexport", "ScientificTypes"]
+git-tree-sha1 = "8d8a4e27199f2e961a85ea6fe768c050fb60d6d9"
+uuid = "af321ab8-2d2e-40a6-b165-3d674595d28e"
+version = "0.2.2"
+
+    [deps.CategoricalDistributions.extensions]
+    UnivariateFiniteDisplayExt = "UnicodePlots"
+
+    [deps.CategoricalDistributions.weakdeps]
+    UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
+
+[[deps.ChainRules]]
+deps = ["Adapt", "ChainRulesCore", "Compat", "Distributed", "GPUArraysCore", "IrrationalConstants", "LinearAlgebra", "Random", "RealDot", "SparseArrays", "SparseInverseSubset", "Statistics", "StructArrays", "SuiteSparse"]
+git-tree-sha1 = "3c190c570fb3108c09f838607386d10c71701789"
+uuid = "082447d4-558c-5d27-93f4-14fc19e9eca2"
+version = "1.73.0"
+
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra"]
 git-tree-sha1 = "12177ad6b3cad7fd50c8b3825ce24a99ad61c18f"
@@ -464,11 +2003,34 @@ weakdeps = ["SparseArrays"]
     [deps.ChainRulesCore.extensions]
     ChainRulesCoreSparseArraysExt = "SparseArrays"
 
+[[deps.ChunkCodecCore]]
+git-tree-sha1 = "3496e2b359c27793d12bec54ec94be7983a6ceb2"
+uuid = "0b6fb165-00bc-4d37-ab8b-79f91016dbe1"
+version = "1.0.2"
+
+[[deps.ChunkCodecLibZlib]]
+deps = ["ChunkCodecCore", "Zlib_jll"]
+git-tree-sha1 = "d4101e848e8d3f585d61d244c2fe0c80a70e6b3b"
+uuid = "4c0bbee4-addc-4d73-81a0-b6caacae83c8"
+version = "1.1.0"
+
+[[deps.ChunkCodecLibZstd]]
+deps = ["ChunkCodecCore", "Zstd_jll"]
+git-tree-sha1 = "34d9873079e4cb3d0c62926a225136824677073f"
+uuid = "55437552-ac27-4d47-9aa3-63184e8fd398"
+version = "1.0.0"
+
 [[deps.Clustering]]
 deps = ["Distances", "LinearAlgebra", "NearestNeighbors", "Printf", "Random", "SparseArrays", "Statistics", "StatsBase"]
 git-tree-sha1 = "3e22db924e2945282e70c33b75d4dde8bfa44c94"
 uuid = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
 version = "0.15.8"
+
+[[deps.CodeTracking]]
+deps = ["InteractiveUtils", "REPL", "UUIDs"]
+git-tree-sha1 = "cfb7a2e89e245a9d5016b70323db412b3a7438d5"
+uuid = "da1fd8a2-8d9e-5ec2-8556-3022fb5608a2"
+version = "3.0.2"
 
 [[deps.CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
@@ -484,9 +2046,9 @@ version = "3.31.0"
 
 [[deps.ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
-git-tree-sha1 = "67e11ee83a43eb71ddc950302c53bf33f0690dfe"
+git-tree-sha1 = "af523e59de94de05b9b367a2ca4d63233aacd222"
 uuid = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
-version = "0.12.1"
+version = "0.12.5"
 weakdeps = ["StyledStrings"]
 
     [deps.ColorTypes.extensions]
@@ -508,11 +2070,22 @@ git-tree-sha1 = "37ea44092930b1811e666c3bc38065d7d87fcc74"
 uuid = "5ae59095-9a9b-59fe-a467-6f913c188581"
 version = "0.13.1"
 
+[[deps.Combinatorics]]
+git-tree-sha1 = "c761b00e7755700f9cdf5b02039939d1359330e1"
+uuid = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+version = "1.1.0"
+
 [[deps.CommonSolve]]
 deps = ["PrecompileTools"]
 git-tree-sha1 = "6c389fa857f6ca5a95474b52a52023fd77f24cb7"
 uuid = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
 version = "0.2.14"
+
+[[deps.CommonSubexpressions]]
+deps = ["MacroTools"]
+git-tree-sha1 = "cda2cfaebb4be89c9084adaca7dd7333369715c5"
+uuid = "bbf7d656-a473-5ed7-a52c-81e309532950"
+version = "0.3.1"
 
 [[deps.Compat]]
 deps = ["TOML", "UUIDs"]
@@ -537,6 +2110,11 @@ weakdeps = ["InverseFunctions"]
 
     [deps.CompositionsBase.extensions]
     CompositionsBaseInverseFunctionsExt = "InverseFunctions"
+
+[[deps.ComputationalResources]]
+git-tree-sha1 = "52cb3ec90e8a8bea0e62e275ba577ad0f74821f7"
+uuid = "ed09eef8-17a6-5b46-8889-db040fac31e3"
+version = "0.3.2"
 
 [[deps.ConstructionBase]]
 git-tree-sha1 = "b4b092499347b18a015186eae3042f72267106cb"
@@ -602,6 +2180,18 @@ git-tree-sha1 = "9e2f36d3c96a820c678f2f1f1782582fcf685bae"
 uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 version = "1.9.1"
 
+[[deps.DiffResults]]
+deps = ["StaticArraysCore"]
+git-tree-sha1 = "782dd5f4561f5d267313f23853baaaa4c52ea621"
+uuid = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
+version = "1.1.0"
+
+[[deps.DiffRules]]
+deps = ["IrrationalConstants", "LogExpFunctions", "NaNMath", "Random", "SpecialFunctions"]
+git-tree-sha1 = "79a2aca180a85c690c58a020d47b426954b590f8"
+uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
+version = "1.16.0"
+
 [[deps.Distances]]
 deps = ["LinearAlgebra", "Statistics", "StatsAPI"]
 git-tree-sha1 = "c7e3a542b999843086e2f29dac96a618c105be1d"
@@ -620,9 +2210,9 @@ version = "1.11.0"
 
 [[deps.Distributions]]
 deps = ["AliasTables", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "Roots", "SpecialFunctions", "Statistics", "StatsAPI", "StatsBase", "StatsFuns"]
-git-tree-sha1 = "a958ab3a40c755563f5e1405c0846cb0446bf19d"
+git-tree-sha1 = "478d3450b1cc56521d1d99ad923acf43f8813c6d"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.131"
+version = "0.25.134"
 
     [deps.Distributions.extensions]
     DistributionsChainRulesCoreExt = "ChainRulesCore"
@@ -645,6 +2235,27 @@ version = "0.9.5"
 deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 version = "1.7.0"
+
+[[deps.EarlyStopping]]
+deps = ["Dates", "Statistics"]
+git-tree-sha1 = "98fdf08b707aaf69f524a6cd0a67858cefe0cfb6"
+uuid = "792122b4-ca99-40de-a6bc-6742525f08b6"
+version = "0.3.0"
+
+[[deps.EnumX]]
+git-tree-sha1 = "c49898e8438c828577f04b92fc9368c388ac783c"
+uuid = "4e289a0a-7415-4d19-859d-a7e5c4648b56"
+version = "1.0.7"
+
+[[deps.EnzymeCore]]
+git-tree-sha1 = "971d7831cc85f43bc9f51d615a3f7f21270c2f1d"
+uuid = "f151be2c-9106-41f4-ab19-57ee4f262869"
+version = "0.8.21"
+weakdeps = ["Adapt", "ChainRulesCore"]
+
+    [deps.EnzymeCore.extensions]
+    AdaptExt = "Adapt"
+    EnzymeCoreChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.EpollShim_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -676,6 +2287,22 @@ git-tree-sha1 = "65e55303b72f4a567a51b174dd2c47496efeb95a"
 uuid = "b86e33f2-c0db-4aa1-a6e0-ab43e668529e"
 version = "0.3.1"
 
+[[deps.FeatureSelection]]
+deps = ["MLJModelInterface", "ScientificTypesBase", "Tables"]
+git-tree-sha1 = "cf591d055fc9919f2400a290ac19174f58cbdab1"
+uuid = "33837fe5-dbff-4c9e-8c2f-c5612fe2b8b6"
+version = "0.2.6"
+
+[[deps.FileIO]]
+deps = ["Pkg", "Requires", "UUIDs"]
+git-tree-sha1 = "6621fef488e496356c9c9625d0562c12a6070819"
+uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+version = "1.20.0"
+weakdeps = ["HTTP"]
+
+    [deps.FileIO.extensions]
+    HTTPExt = "HTTP"
+
 [[deps.FilePathsBase]]
 deps = ["Compat", "Dates"]
 git-tree-sha1 = "3bab2c5aa25e7840a4b065805c0cdfc01f3068d2"
@@ -693,9 +2320,9 @@ version = "1.11.0"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "5bad39456d9f0166184fce2248783dd9862645c1"
+git-tree-sha1 = "831f86fde78ab7f6470d6ba4d1161a11fb6b4ec0"
 uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
-version = "1.17.0"
+version = "1.18.2"
 weakdeps = ["PDMats", "SparseArrays", "StaticArrays", "Statistics"]
 
     [deps.FillArrays.extensions]
@@ -710,6 +2337,32 @@ git-tree-sha1 = "59af96b98217c6ef4ae0dfe065ac7c20831d1a84"
 uuid = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
 version = "0.8.6"
 
+[[deps.Flux]]
+deps = ["ADTypes", "Adapt", "BFloat16s", "ChainRulesCore", "Compat", "EnzymeCore", "Functors", "GPUArrays", "LinearAlgebra", "MLCore", "MLDataDevices", "MLUtils", "MacroTools", "NNlib", "OneHotArrays", "Optimisers", "Preferences", "ProgressLogging", "Random", "Reexport", "Setfield", "SparseArrays", "SpecialFunctions", "Statistics", "Zygote"]
+git-tree-sha1 = "c816ae0963abf4bc2f74f968e4c1f6dbb7902753"
+uuid = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+version = "0.16.11"
+
+    [deps.Flux.extensions]
+    FluxAMDGPUExt = "AMDGPU"
+    FluxCUDAExt = "CUDA"
+    FluxEnzymeExt = "Enzyme"
+    FluxFiniteDifferencesExt = "FiniteDifferences"
+    FluxMPIExt = "MPI"
+    FluxMPINCCLExt = ["CUDA", "MPI", "NCCL"]
+    FluxMooncakeExt = "Mooncake"
+    FluxReactantExt = "Reactant"
+
+    [deps.Flux.weakdeps]
+    AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+    FiniteDifferences = "26cc04aa-876d-5657-8c51-4c34ba976000"
+    MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
+    Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
+    NCCL = "3fe64909-d7a1-4096-9b7d-7a0f12cf0f6b"
+    Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
+
 [[deps.Fontconfig_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Expat_jll", "FreeType2_jll", "JLLWrappers", "Libdl", "Libuuid_jll", "Zlib_jll"]
 git-tree-sha1 = "f85dac9a96a01087df6e3a749840015a0ca3817d"
@@ -720,6 +2373,16 @@ version = "2.17.1+0"
 git-tree-sha1 = "9c68794ef81b08086aeb32eeaf33531668d5f5fc"
 uuid = "1fa38f19-a742-5d3f-a2b9-30dd87b9d5f8"
 version = "1.3.7"
+
+[[deps.ForwardDiff]]
+deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "LinearAlgebra", "LogExpFunctions", "NaNMath", "Preferences", "Printf", "Random", "SpecialFunctions"]
+git-tree-sha1 = "1b86cca764a61dcac4fef4c5e16e378e5ed6953c"
+uuid = "f6369f11-7733-5829-9624-2563aa707210"
+version = "1.4.5"
+weakdeps = ["StaticArrays"]
+
+    [deps.ForwardDiff.extensions]
+    ForwardDiffStaticArraysExt = "StaticArrays"
 
 [[deps.FreeType2_jll]]
 deps = ["Artifacts", "Bzip2_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
@@ -733,6 +2396,12 @@ git-tree-sha1 = "7a214fdac5ed5f59a22c2d9a885a16da1c74bbc7"
 uuid = "559328eb-81f9-559d-9380-de523a88c83c"
 version = "1.0.17+0"
 
+[[deps.Functors]]
+deps = ["Compat", "ConstructionBase", "LinearAlgebra", "Random"]
+git-tree-sha1 = "1ac2813982db52b974c9343124ca61adbf297316"
+uuid = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
+version = "0.5.3"
+
 [[deps.Future]]
 deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
@@ -743,6 +2412,22 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Xorg_libXcursor_jl
 git-tree-sha1 = "64bbbb7d1499297751b536dd39c58b20750ab1db"
 uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
 version = "3.5.1+0"
+
+[[deps.GPUArrays]]
+deps = ["Adapt", "GPUArraysCore", "KernelAbstractions", "LLVM", "LinearAlgebra", "Printf", "Random", "Reexport", "ScopedValues", "Serialization", "SparseArrays", "Statistics"]
+git-tree-sha1 = "0811627284eba0d19bf64d0d247c63fa1e5c26b6"
+uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
+version = "11.5.14"
+weakdeps = ["JLD2"]
+
+    [deps.GPUArrays.extensions]
+    JLD2Ext = "JLD2"
+
+[[deps.GPUArraysCore]]
+deps = ["Adapt"]
+git-tree-sha1 = "83cf05ab16a73219e5f6bd1bdfa9848fa24ac627"
+uuid = "46192b85-c4d5-4398-a991-12ede77f4527"
+version = "0.2.0"
 
 [[deps.GR]]
 deps = ["Artifacts", "Base64", "DelimitedFiles", "Downloads", "GR_jll", "JSON", "Libdl", "LinearAlgebra", "Preferences", "Printf", "Qt6Wayland_jll", "Random", "Serialization", "Sockets", "TOML", "Tar", "Test", "p7zip_jll"]
@@ -792,17 +2477,34 @@ git-tree-sha1 = "69ffb934a5c5b7e086a0b4fee3427db2556fba6e"
 uuid = "3b182d85-2403-5c21-9c21-1e1f0cc25472"
 version = "1.3.16+0"
 
+[[deps.HTTP]]
+deps = ["Base64", "CodecZlib", "Dates", "EnumX", "PrecompileTools", "Random", "Reseau", "SHA", "URIs", "UUIDs", "Zlib_jll"]
+git-tree-sha1 = "b0ff6627f1308bc1691528aac3b70ac3abd1d598"
+uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+version = "2.6.7"
+
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll"]
 git-tree-sha1 = "9d9531a9cb63a9edc33836414e82a07e81710de2"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "100.14004.0+0"
 
+[[deps.HashArrayMappedTries]]
+git-tree-sha1 = "2eaa69a7cab70a52b9687c8bf950a5a93ec895ae"
+uuid = "076d061b-32b6-4027-95e0-9a2c6f6d7e74"
+version = "0.2.0"
+
 [[deps.HypergeometricFunctions]]
 deps = ["Gamma", "LinearAlgebra"]
-git-tree-sha1 = "31bb6c92405c084617facc1d7ed9eb6c402d061e"
+git-tree-sha1 = "c28dceeadc1c9c699656a3ac9d63f79cfaa17472"
 uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
-version = "0.3.30"
+version = "0.3.31"
+
+[[deps.IRTools]]
+deps = ["InteractiveUtils", "MacroTools"]
+git-tree-sha1 = "88d07a6b68b8fffb13cacd49e23ea73c571859b2"
+uuid = "7869d1d1-7146-5819-86e3-90919afe41df"
+version = "0.4.20"
 
 [[deps.InlineStrings]]
 git-tree-sha1 = "06b65886c7577a3784d616e29f1302c2e36e389d"
@@ -842,9 +2544,9 @@ version = "0.16.3"
     Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [[deps.InverseFunctions]]
-git-tree-sha1 = "a779299d77cd080bf77b97535acecd73e1c5e5cb"
+git-tree-sha1 = "5cc6ad3e2bfc75a11eed92632ee341d37f4a4536"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
-version = "0.1.17"
+version = "0.1.18"
 weakdeps = ["Dates", "Test"]
 
     [deps.InverseFunctions.extensions]
@@ -857,14 +2559,30 @@ uuid = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
 version = "1.3.1"
 
 [[deps.IrrationalConstants]]
-git-tree-sha1 = "b2d91fe939cae05960e760110b328288867b5758"
+git-tree-sha1 = "d22e8bdb3f03c300a103ff23c0dd5a654c6701de"
 uuid = "92d709cd-6900-40b7-9082-c6be49f344b6"
-version = "0.2.6"
+version = "0.2.7"
+
+[[deps.IterationControl]]
+deps = ["EarlyStopping", "InteractiveUtils"]
+git-tree-sha1 = "e663925ebc3d93c1150a7570d114f9ea2f664726"
+uuid = "b3c1a2ee-3fec-4384-bf48-272ea71de57c"
+version = "0.5.4"
 
 [[deps.IteratorInterfaceExtensions]]
 git-tree-sha1 = "a3f24677c21f5bbe9d2a714f95dcd58337fb2856"
 uuid = "82899510-4779-5014-852e-03e436cf321d"
 version = "1.0.0"
+
+[[deps.JLD2]]
+deps = ["ChunkCodecLibZlib", "ChunkCodecLibZstd", "FileIO", "MacroTools", "Mmap", "OrderedCollections", "PrecompileTools", "ScopedValues"]
+git-tree-sha1 = "877edc1d2f51adcef0bfacd19464a19e7cfddddb"
+uuid = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+version = "0.6.6"
+weakdeps = ["UnPack"]
+
+    [deps.JLD2.extensions]
+    UnPackExt = "UnPack"
 
 [[deps.JLFzf]]
 deps = ["REPL", "Random", "fzf_jll"]
@@ -901,6 +2619,18 @@ deps = ["StyledStrings"]
 uuid = "ac6e5ff7-fb65-4e79-a425-ec3bc9c03011"
 version = "1.12.0"
 
+[[deps.KernelAbstractions]]
+deps = ["Adapt", "Atomix", "InteractiveUtils", "MacroTools", "PrecompileTools", "Requires", "StaticArrays", "UUIDs"]
+git-tree-sha1 = "a5b87110fa95d711355af44832497745aa93fb52"
+uuid = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+version = "0.9.42"
+weakdeps = ["EnzymeCore", "LinearAlgebra", "SparseArrays"]
+
+    [deps.KernelAbstractions.extensions]
+    EnzymeExt = "EnzymeCore"
+    LinearAlgebraExt = "LinearAlgebra"
+    SparseArraysExt = "SparseArrays"
+
 [[deps.KernelDensity]]
 deps = ["Distributions", "DocStringExtensions", "FFTA", "Interpolations", "StatsBase"]
 git-tree-sha1 = "9eda8292dd3268b3b7ec9df21bbfac24e177ec52"
@@ -918,6 +2648,22 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "39bca05343661c347aae0bca57a5994a0bf4f08d"
 uuid = "88015f11-f218-50d7-93a8-a6af411a945d"
 version = "4.2.0+0"
+
+[[deps.LLVM]]
+deps = ["CEnum", "LLVMExtra_jll", "Libdl", "PrecompileTools", "Preferences", "Printf", "Unicode"]
+git-tree-sha1 = "d4bfee24427f4f441bd9212a107e375c39663aab"
+uuid = "929cbde3-209d-540e-8aea-75f648917ca0"
+version = "9.13.1"
+weakdeps = ["BFloat16s"]
+
+    [deps.LLVM.extensions]
+    BFloat16sExt = "BFloat16s"
+
+[[deps.LLVMExtra_jll]]
+deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
+git-tree-sha1 = "d77aea19c9a71059a021acd99b0a4343e9661d94"
+uuid = "dad2f222-ce93-54a1-a47d-0025e8a3acab"
+version = "0.0.47+0"
 
 [[deps.LLVMOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -947,6 +2693,23 @@ version = "0.16.12"
     SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
     SymEngine = "123dc426-2d89-5057-bbad-38513e3affd8"
     tectonic_jll = "d7dd28d6-a5e6-559c-9131-7eb760cdacc5"
+
+[[deps.LatinHypercubeSampling]]
+deps = ["Random", "StableRNGs", "StatsBase", "Test"]
+git-tree-sha1 = "825289d43c753c7f1bf9bed334c253e9913997f8"
+uuid = "a5e1c1ea-c99a-51d3-a14d-a9a37257b02d"
+version = "1.9.0"
+
+[[deps.LazyArtifacts]]
+deps = ["Artifacts", "Pkg"]
+uuid = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
+version = "1.11.0"
+
+[[deps.LearnAPI]]
+deps = ["Preferences"]
+git-tree-sha1 = "a205f0181e25a22089a62a56b9e537b889540dfb"
+uuid = "92ad9a40-7767-427a-9ee6-6e577f1266cb"
+version = "2.0.1"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
@@ -1020,9 +2783,9 @@ version = "1.12.0"
 
 [[deps.LogExpFunctions]]
 deps = ["DocStringExtensions", "IrrationalConstants", "LinearAlgebra"]
-git-tree-sha1 = "bba2d9aa057d8f126415de240573e86a8f39d2a1"
+git-tree-sha1 = "28d620bcdb37a3fb02de9f521928ee453690f414"
 uuid = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
-version = "1.0.1"
+version = "1.0.3"
 
     [deps.LogExpFunctions.extensions]
     LogExpFunctionsChainRulesCoreExt = "ChainRulesCore"
@@ -1038,6 +2801,148 @@ version = "1.0.1"
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 version = "1.11.0"
 
+[[deps.MLCore]]
+deps = ["DataAPI", "SimpleTraits", "Tables"]
+git-tree-sha1 = "c4ab44fe709638fda6f2c0cbfea2c114932d6c2f"
+uuid = "c2834f40-e789-41da-a90e-33b280584a8c"
+version = "1.1.0"
+
+    [deps.MLCore.extensions]
+    MLCorePythonCallExt = "PythonCall"
+
+    [deps.MLCore.weakdeps]
+    PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+
+[[deps.MLDataDevices]]
+deps = ["Adapt", "Functors", "Preferences", "Random", "SciMLPublic"]
+git-tree-sha1 = "29b00f22be6fd821a214760f0224329f21998a05"
+uuid = "7e8f7934-dd98-4c1a-8fe8-92b47a384d40"
+version = "1.17.10"
+
+    [deps.MLDataDevices.extensions]
+    AMDGPUExt = "AMDGPU"
+    CUDAExt = "CUDA"
+    ChainRulesCoreExt = "ChainRulesCore"
+    ChainRulesExt = "ChainRules"
+    ComponentArraysExt = "ComponentArrays"
+    FillArraysExt = "FillArrays"
+    GPUArraysSparseArraysExt = ["GPUArrays", "SparseArrays"]
+    MLUtilsExt = "MLUtils"
+    MetalExt = ["GPUArrays", "Metal"]
+    OneHotArraysExt = "OneHotArrays"
+    OpenCLExt = ["GPUArrays", "OpenCL"]
+    ReactantExt = "Reactant"
+    RecursiveArrayToolsExt = "RecursiveArrayTools"
+    ReverseDiffExt = "ReverseDiff"
+    SparseArraysExt = "SparseArrays"
+    TrackerExt = "Tracker"
+    ZygoteExt = "Zygote"
+    cuDNNExt = ["CUDA", "cuDNN"]
+    oneAPIExt = ["GPUArrays", "oneAPI"]
+
+    [deps.MLDataDevices.weakdeps]
+    AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    ComponentArrays = "b0b7db55-cfe3-40fc-9ded-d10e2dbeff66"
+    FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
+    GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
+    MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
+    Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+    OneHotArrays = "0b1bfda6-eb8a-41d2-88d8-f5af5cad476f"
+    OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2"
+    Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
+    RecursiveArrayTools = "731186ca-8d62-57ce-b412-fbd966d074cd"
+    ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
+    SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+    Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
+    Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+    cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
+    oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
+
+[[deps.MLJ]]
+deps = ["CategoricalArrays", "ComputationalResources", "DataAPI", "Distributed", "Distributions", "FeatureSelection", "LinearAlgebra", "MLJBalancing", "MLJBase", "MLJEnsembles", "MLJIteration", "MLJModels", "MLJTransforms", "MLJTuning", "MLJWrappers", "OpenML", "Pkg", "ProgressMeter", "Random", "Reexport", "ScientificTypes", "StatisticalMeasures", "Statistics", "StatsBase", "Tables"]
+git-tree-sha1 = "67d1c6c5aeaddb8f90eb2ce32b5949b6d60516db"
+uuid = "add582a8-e3ab-11e8-2d5e-e98b27df1bc7"
+version = "0.23.3"
+
+[[deps.MLJBalancing]]
+deps = ["MLJBase", "MLJModelInterface", "MLUtils", "OrderedCollections", "Random", "StatsBase"]
+git-tree-sha1 = "3886c172c42219166c1137a9f4dc39b863f28823"
+uuid = "45f359ea-796d-4f51-95a5-deb1a414c586"
+version = "0.1.6"
+
+[[deps.MLJBase]]
+deps = ["CategoricalArrays", "CategoricalDistributions", "ComputationalResources", "DataAPI", "Dates", "DelimitedFiles", "Distributed", "Distributions", "FillArrays", "InteractiveUtils", "InvertedIndices", "LearnAPI", "LinearAlgebra", "MLJModelInterface", "Measurements", "Missings", "OrderedCollections", "Parameters", "PrettyTables", "ProgressMeter", "Random", "RecipesBase", "Reexport", "ScientificTypes", "Serialization", "StatisticalMeasuresBase", "StatisticalTraits", "Statistics", "StatsBase", "Tables"]
+git-tree-sha1 = "31695dfdd200cda7d06ac552e83f8d65dc55fc2d"
+uuid = "a7f614a8-145f-11e9-1d2a-a57a1082229d"
+version = "1.14.2"
+weakdeps = ["StatisticalMeasures"]
+
+    [deps.MLJBase.extensions]
+    DefaultMeasuresExt = "StatisticalMeasures"
+
+[[deps.MLJEnsembles]]
+deps = ["CategoricalArrays", "CategoricalDistributions", "ComputationalResources", "Distributed", "Distributions", "MLJModelInterface", "ProgressMeter", "Random", "ScientificTypesBase", "StatisticalMeasuresBase", "StatsBase"]
+git-tree-sha1 = "549f8ae7ae51e7c38f84202477508b0371ed16a9"
+uuid = "50ed68f4-41fd-4504-931a-ed422449fee0"
+version = "0.4.5"
+
+[[deps.MLJFlux]]
+deps = ["CategoricalArrays", "ColorTypes", "ComputationalResources", "Flux", "MLJModelInterface", "Metalhead", "Optimisers", "ProgressMeter", "Random", "Statistics", "Tables"]
+git-tree-sha1 = "f059a2d788652cb9fd714c5be1617e2baab1c573"
+uuid = "094fc8d1-fd35-5302-93ea-dabda2abf845"
+version = "0.6.8"
+
+[[deps.MLJIteration]]
+deps = ["IterationControl", "MLJBase", "Random", "Serialization"]
+git-tree-sha1 = "21506d401828d09a9fefc55a35d3da5c27d73f57"
+uuid = "614be32b-d00c-4edb-bd02-1eb411ab5e55"
+version = "0.6.5"
+
+[[deps.MLJModelInterface]]
+deps = ["InteractiveUtils", "REPL", "Random", "ScientificTypesBase", "StatisticalTraits"]
+git-tree-sha1 = "c275fae2e693206b4527dd9d2382aa15359ef3ed"
+uuid = "e80e1ace-859a-464e-9ed9-23947d8ae3ea"
+version = "1.12.1"
+
+[[deps.MLJModels]]
+deps = ["CategoricalArrays", "CategoricalDistributions", "Combinatorics", "Dates", "Distances", "Distributions", "InteractiveUtils", "LinearAlgebra", "MLJModelInterface", "Markdown", "OrderedCollections", "Parameters", "Pkg", "PrettyPrinting", "REPL", "Random", "RelocatableFolders", "ScientificTypes", "StatisticalTraits", "Statistics", "StatsBase", "Tables"]
+git-tree-sha1 = "fe8ed28e3a52b453a94e317465be591f4fda5622"
+uuid = "d491faf4-2d78-11e9-2867-c94bc002c0b7"
+version = "0.18.10"
+
+[[deps.MLJMultivariateStatsInterface]]
+deps = ["CategoricalDistributions", "Distances", "LinearAlgebra", "MLJModelInterface", "MultivariateStats", "StatsBase"]
+git-tree-sha1 = "4a0b6e80590b3c6a95d71d5b8e32cca13ad02c5a"
+uuid = "1b6a4a23-ba22-4f51-9698-8599985d3728"
+version = "0.5.4"
+
+[[deps.MLJTransforms]]
+deps = ["BitBasis", "CategoricalArrays", "Combinatorics", "Dates", "Distributions", "LinearAlgebra", "MLJModelInterface", "OrderedCollections", "Parameters", "ScientificTypes", "ScientificTypesBase", "Statistics", "StatsBase", "TableOperations", "Tables"]
+git-tree-sha1 = "398618135f634bf28d0fcc8a02d9ec3906675a6f"
+uuid = "23777cdb-d90c-4eb0-a694-7c2b83d5c1d6"
+version = "0.1.7"
+
+[[deps.MLJTuning]]
+deps = ["ComputationalResources", "Distributed", "Distributions", "LatinHypercubeSampling", "MLJBase", "ProgressMeter", "Random", "RecipesBase", "StatisticalMeasuresBase"]
+git-tree-sha1 = "f36dc8658fd7c4b69d35bbc826837d07141feacb"
+uuid = "03970b2e-30c4-11ea-3135-d1576263f10f"
+version = "0.8.9"
+
+[[deps.MLJWrappers]]
+deps = ["MLJModelInterface"]
+git-tree-sha1 = "19371a0b1348766c71d3c9934e0471fe36978e72"
+uuid = "b5d0f7f3-9870-4c70-ba08-cb780c37e63f"
+version = "0.1.3"
+
+[[deps.MLUtils]]
+deps = ["ChainRulesCore", "CodeTracking", "Compat", "DataAPI", "DelimitedFiles", "Distributed", "InteractiveUtils", "MLCore", "Mmap", "NNlib", "Random", "ShowCases", "SimpleTraits", "Statistics", "StatsBase", "Tables"]
+git-tree-sha1 = "0a589dc0ada20d30b7e9ad13752cf25361875bf2"
+uuid = "f1d291b0-491e-4a28-83b9-f70985020b54"
+version = "0.4.13"
+
 [[deps.MacroTools]]
 git-tree-sha1 = "1e0228a030642014fe5cfe68c2c0a818f9e3f522"
 uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
@@ -1048,16 +2953,50 @@ deps = ["Base64", "JuliaSyntaxHighlighting", "StyledStrings"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 version = "1.11.0"
 
+[[deps.Measurements]]
+deps = ["Calculus", "LinearAlgebra", "Printf"]
+git-tree-sha1 = "cb47f69a1cab9dcec7ff4a5d6e163410d6905866"
+uuid = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
+version = "2.14.1"
+
+    [deps.Measurements.extensions]
+    MeasurementsBaseTypeExt = "BaseType"
+    MeasurementsJunoExt = "Juno"
+    MeasurementsMakieExt = "Makie"
+    MeasurementsRecipesBaseExt = "RecipesBase"
+    MeasurementsSpecialFunctionsExt = "SpecialFunctions"
+    MeasurementsUnitfulExt = "Unitful"
+
+    [deps.Measurements.weakdeps]
+    BaseType = "7fbed51b-1ef5-4d67-9085-a4a9b26f478c"
+    Juno = "e5e0dc1b-0480-54bc-9374-aad01c23163d"
+    Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+    RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
+    SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+    Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
 [[deps.Measures]]
 git-tree-sha1 = "b513cedd20d9c914783d8ad83d08120702bf2c77"
 uuid = "442fdcdd-2543-5da2-b0f3-8c86c306513e"
 version = "0.3.3"
 
+[[deps.Metalhead]]
+deps = ["Artifacts", "BSON", "ChainRulesCore", "Flux", "Functors", "JLD2", "LazyArtifacts", "MLUtils", "NNlib", "PartialFunctions", "Random", "Statistics"]
+git-tree-sha1 = "c022cd34e7bd63374361bbc033cc5d845d94abc5"
+uuid = "dbeba491-748d-5e0e-a39e-b530a07fa0cc"
+version = "0.9.6"
+
+    [deps.Metalhead.extensions]
+    MetalheadCUDAExt = "CUDA"
+
+    [deps.Metalhead.weakdeps]
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+
 [[deps.Missings]]
 deps = ["DataAPI"]
-git-tree-sha1 = "ec4f7fbeab05d7747bdf98eb74d130a2a2ed298d"
+git-tree-sha1 = "d9d20d6eb2a3290ba5c70a1c013b45305cc39c9e"
 uuid = "e1d29d7a-bbdc-5cf2-9ac0-f12de2c33e28"
-version = "1.2.0"
+version = "1.2.1"
 
 [[deps.Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
@@ -1078,6 +3017,35 @@ deps = ["Arpack", "Distributions", "LinearAlgebra", "SparseArrays", "Statistics"
 git-tree-sha1 = "8bcdc90d5c361a73635ad1c19d9c39a52bf3e0a3"
 uuid = "6f286f6a-111f-5878-ab1e-185364afe411"
 version = "0.10.5"
+
+[[deps.NNlib]]
+deps = ["Adapt", "Atomix", "BFloat16s", "ChainRulesCore", "GPUArraysCore", "KernelAbstractions", "LinearAlgebra", "Random", "ScopedValues", "Statistics"]
+git-tree-sha1 = "d450844d195714a2d29b38c231193c0297cf90e8"
+uuid = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
+version = "0.9.45"
+
+    [deps.NNlib.extensions]
+    NNlibAMDGPUExt = "AMDGPU"
+    NNlibCUDACUDNNExt = ["CUDA", "cuDNN"]
+    NNlibCUDAExt = "CUDA"
+    NNlibEnzymeCoreCUDNNExt = ["EnzymeCore", "CUDA", "cuDNN"]
+    NNlibEnzymeCoreExt = "EnzymeCore"
+    NNlibFFTWExt = "FFTW"
+    NNlibForwardDiffExt = "ForwardDiff"
+    NNlibMetalExt = "Metal"
+    NNlibMooncakeCUDAExt = ["Mooncake", "CUDA"]
+    NNlibSpecialFunctionsExt = "SpecialFunctions"
+
+    [deps.NNlib.weakdeps]
+    AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    EnzymeCore = "f151be2c-9106-41f4-ab19-57ee4f262869"
+    FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+    ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+    Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+    Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
+    SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+    cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
@@ -1115,6 +3083,12 @@ git-tree-sha1 = "b6aa4566bb7ae78498a5e68943863fa8b5231b59"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
 version = "1.3.6+0"
 
+[[deps.OneHotArrays]]
+deps = ["Adapt", "ChainRulesCore", "Compat", "GPUArraysCore", "LinearAlgebra", "NNlib"]
+git-tree-sha1 = "9510d7008275fc5b33fc72a73f8fddef0b5430c6"
+uuid = "0b1bfda6-eb8a-41d2-88d8-f5af5cad476f"
+version = "0.2.11"
+
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
@@ -1124,6 +3098,12 @@ version = "0.3.29+0"
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
 version = "0.8.7+0"
+
+[[deps.OpenML]]
+deps = ["ARFFFiles", "Downloads", "HTTP", "JSON", "Markdown", "Pkg", "Scratch"]
+git-tree-sha1 = "d7ce3ebc5df95fc62c060b9f00c4fc534c5af4ac"
+uuid = "8b6db2d4-7670-4922-a472-f9537c81ab66"
+version = "0.3.4"
 
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1136,6 +3116,24 @@ git-tree-sha1 = "1346c9208249809840c91b26703912dff463d335"
 uuid = "efe28fd5-8261-553b-a9e1-b2916fc3738e"
 version = "0.5.6+0"
 
+[[deps.Optimisers]]
+deps = ["ChainRulesCore", "Compat", "ConstructionBase", "Functors", "LinearAlgebra", "Random", "Statistics"]
+git-tree-sha1 = "b6a586b581eccc60a181145ffd4382099e32e2df"
+uuid = "3bd65402-5787-11e9-1adc-39752487f4e2"
+version = "0.4.9"
+
+    [deps.Optimisers.extensions]
+    OptimisersAdaptExt = ["Adapt"]
+    OptimisersEnzymeCoreExt = "EnzymeCore"
+    OptimisersReactantExt = "Reactant"
+    OptimisersReactantMLDataDevicesExt = ["Reactant", "MLDataDevices"]
+
+    [deps.Optimisers.weakdeps]
+    Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+    EnzymeCore = "f151be2c-9106-41f4-ab19-57ee4f262869"
+    MLDataDevices = "7e8f7934-dd98-4c1a-8fe8-92b47a384d40"
+    Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
+
 [[deps.Opus_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "e2bb57a313a74b8104064b7efd01406c0a50d2ff"
@@ -1143,9 +3141,9 @@ uuid = "91d4177d-7536-5919-b921-800302f37372"
 version = "1.6.1+0"
 
 [[deps.OrderedCollections]]
-git-tree-sha1 = "05f45c2e0de6259db764adbfd2f1dc6d3f8de13c"
+git-tree-sha1 = "b079a6affebde167dad8ffe0d670b53917fbcb68"
 uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
-version = "2.0.1"
+version = "2.0.3"
 
 [[deps.PCRE2_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1168,11 +3166,23 @@ git-tree-sha1 = "1912a9f1b9ca55005b03ba075f8e19993583e237"
 uuid = "36c8627f-9965-5494-a995-c6b170f724f3"
 version = "1.58.2+0"
 
+[[deps.Parameters]]
+deps = ["OrderedCollections", "UnPack"]
+git-tree-sha1 = "0ed04c372da78ff5b98e35e3bd4f4ca9931299cc"
+uuid = "d96e819e-fc66-5662-9728-84c9c7592b0a"
+version = "0.13.1"
+
 [[deps.Parsers]]
 deps = ["Dates", "PrecompileTools", "UUIDs"]
 git-tree-sha1 = "ba0dc8a8a67cacac4842631f960c046e4e563675"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
 version = "2.8.8"
+
+[[deps.PartialFunctions]]
+deps = ["MacroTools"]
+git-tree-sha1 = "ba0ea009d9f1e38162d016ca54627314b6d8aac8"
+uuid = "570af359-4316-4cb7-8c74-252c00c2016b"
+version = "1.2.1"
 
 [[deps.Pixman_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LLVMOpenMP_jll", "Libdl"]
@@ -1235,22 +3245,29 @@ version = "1.3.4"
 
 [[deps.Preferences]]
 deps = ["TOML"]
-git-tree-sha1 = "8b770b60760d4451834fe79dd483e318eee709c4"
+git-tree-sha1 = "aef1987d90dcc2e2cbd919ad10b2d25bcce4f418"
 uuid = "21216c6a-2e73-6563-6e65-726566657250"
-version = "1.5.2"
+version = "1.6.1"
+
+[[deps.PrettyPrinting]]
+git-tree-sha1 = "0b7f4ad437e31c51cf5b91fb103579b04025170a"
+uuid = "54e16d92-306c-5ea0-a30b-337be88ac337"
+version = "0.4.3"
 
 [[deps.PrettyTables]]
-deps = ["Crayons", "LaTeXStrings", "Markdown", "PrecompileTools", "Printf", "REPL", "Reexport", "StringManipulation", "Tables"]
-git-tree-sha1 = "1b8aa19f229b1cea7fc93874a52e49db6a854450"
+deps = ["Crayons", "LaTeXStrings", "Markdown", "PrecompileTools", "Printf", "REPL", "Reexport", "StringManipulation", "StyledStrings", "Tables"]
+git-tree-sha1 = "eeac4c9337f876c3c32b8da732141953567f57c9"
 uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
-version = "3.4.8"
+version = "3.5.1"
 
     [deps.PrettyTables.extensions]
     PrettyTablesExcelExt = "XLSX"
     PrettyTablesTypstryExt = "Typstry"
+    PrettyTablesWriteDocxExt = "WriteDocx"
 
     [deps.PrettyTables.weakdeps]
     Typstry = "f0ed7684-a786-439e-b1e3-3b82803b501e"
+    WriteDocx = "d049ceea-54ee-41d7-a26f-ba29db3b6599"
     XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
 
 [[deps.Primes]]
@@ -1262,6 +3279,18 @@ version = "0.5.7"
 [[deps.Printf]]
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+version = "1.11.0"
+
+[[deps.ProgressLogging]]
+deps = ["Logging", "SHA", "UUIDs"]
+git-tree-sha1 = "f0803bc1171e455a04124affa9c21bba5ac4db32"
+uuid = "33c8b6b6-d38a-422a-b730-caa89a2f386c"
+version = "0.1.6"
+
+[[deps.ProgressMeter]]
+deps = ["Distributed", "Printf"]
+git-tree-sha1 = "fbb92c6c56b34e1a2c4c36058f68f332bec840e7"
+uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
 version = "1.11.0"
 
 [[deps.PtrArrays]]
@@ -1331,6 +3360,12 @@ weakdeps = ["FixedPointNumbers"]
     [deps.Ratios.extensions]
     RatiosFixedPointNumbersExt = "FixedPointNumbers"
 
+[[deps.RealDot]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "9f0a1b71baaf7650f4fa8a1d168c7fb6ee41f0c9"
+uuid = "c1ae055f-0cd5-4b69-90a6-9a35b1a98df9"
+version = "0.1.0"
+
 [[deps.RecipesBase]]
 deps = ["PrecompileTools"]
 git-tree-sha1 = "5c3d09cc4f31f5fc6af001c250bf1278733100ff"
@@ -1360,6 +3395,12 @@ git-tree-sha1 = "62389eeff14780bfe55195b7204c0d8738436d64"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "1.3.1"
 
+[[deps.Reseau]]
+deps = ["NetworkOptions", "OpenSSL_jll", "PrecompileTools", "Random", "SHA"]
+git-tree-sha1 = "aaee74fab545e9af4b21d10c2203c93c636c4ae0"
+uuid = "802f3686-a58f-41ce-bb0c-3c43c75bba36"
+version = "1.4.1"
+
 [[deps.Rmath]]
 deps = ["Random", "Rmath_jll"]
 git-tree-sha1 = "5b3d50eb374cea306873b371d3f8d3915a018f0b"
@@ -1374,9 +3415,9 @@ version = "0.5.2+0"
 
 [[deps.Roots]]
 deps = ["Accessors", "CommonSolve", "Printf"]
-git-tree-sha1 = "4db094d5e079abbda658acfe1c4d098430417717"
+git-tree-sha1 = "c5e8a0a52c0d5d043214de04f11f4d9c2c6ccdb8"
 uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-version = "3.0.8"
+version = "3.0.13"
 
     [deps.Roots.extensions]
     RootsChainRulesCoreExt = "ChainRulesCore"
@@ -1398,6 +3439,30 @@ version = "3.0.8"
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 version = "0.7.0"
 
+[[deps.SciMLPublic]]
+deps = ["PrecompileTools"]
+git-tree-sha1 = "74685afb51732a464fbce79a72708f7c4203ceb7"
+uuid = "431bcebd-1456-4ced-9d72-93c2757fff0b"
+version = "1.3.0"
+
+[[deps.ScientificTypes]]
+deps = ["CategoricalArrays", "ColorTypes", "Dates", "Distributions", "PrettyTables", "Reexport", "ScientificTypesBase", "StatisticalTraits", "Tables"]
+git-tree-sha1 = "696fbda25b0a9dda3e57225d0b457e6fe1565caa"
+uuid = "321657f4-b219-11e9-178b-2701a2544e81"
+version = "3.4.0"
+
+[[deps.ScientificTypesBase]]
+deps = ["InteractiveUtils"]
+git-tree-sha1 = "e785eaa35a0f5518a388f9010e66fda64ea95ede"
+uuid = "30f210dd-8aff-4c5f-94ba-8e64358c1161"
+version = "3.1.0"
+
+[[deps.ScopedValues]]
+deps = ["HashArrayMappedTries", "Logging"]
+git-tree-sha1 = "67a144433c4ce877ee6d1ada69a124d6b1ecf7be"
+uuid = "7e506255-f358-4e82-b7e4-beb19740aa63"
+version = "1.6.2"
+
 [[deps.Scratch]]
 deps = ["Dates"]
 git-tree-sha1 = "9b81b8393e50b7d4e6d0a9f14e192294d3b7c109"
@@ -1414,16 +3479,33 @@ version = "1.4.10"
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 version = "1.11.0"
 
+[[deps.Setfield]]
+deps = ["ConstructionBase", "Future", "MacroTools", "StaticArraysCore"]
+git-tree-sha1 = "c5391c6ace3bc430ca630251d02ea9687169ca68"
+uuid = "efcf1570-3423-57d1-acb7-fd33fddbac46"
+version = "1.1.2"
+
 [[deps.SharedArrays]]
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
 uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 version = "1.11.0"
+
+[[deps.ShowCases]]
+git-tree-sha1 = "7f534ad62ab2bd48591bdeac81994ea8c445e4a5"
+uuid = "605ecd9f-84a6-4c9e-81e2-4798472b76a3"
+version = "0.1.0"
 
 [[deps.Showoff]]
 deps = ["Dates"]
 git-tree-sha1 = "8238217340ad0aaabe11afe39c1098b5bc9f4c8e"
 uuid = "992d4aef-0814-514b-bc4d-f2e9a6c4116f"
 version = "1.1.1"
+
+[[deps.SimpleTraits]]
+deps = ["InteractiveUtils", "MacroTools"]
+git-tree-sha1 = "7ddb0b49c109481b046972c0e4ab02b2127d6a75"
+uuid = "699a6c99-e7fa-54fc-8d76-47d257e15c1d"
+version = "0.9.6"
 
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
@@ -1440,11 +3522,17 @@ deps = ["Libdl", "LinearAlgebra", "Random", "Serialization", "SuiteSparse_jll"]
 uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 version = "1.12.0"
 
+[[deps.SparseInverseSubset]]
+deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
+git-tree-sha1 = "eec446511ab8c3293dd846c61c15128392fceed5"
+uuid = "dc90abb0-5640-4711-901d-7e5b23a2fada"
+version = "0.1.3"
+
 [[deps.SpecialFunctions]]
 deps = ["IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
-git-tree-sha1 = "429071b23f4c9a13fb6582f807cc2ef454082408"
+git-tree-sha1 = "88ef0d98204515bc53dd4aaea5f7788882d1b66c"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "2.9.0"
+version = "2.9.1"
 weakdeps = ["ChainRulesCore"]
 
     [deps.SpecialFunctions.extensions]
@@ -1471,6 +3559,32 @@ weakdeps = ["ChainRulesCore", "Statistics"]
 git-tree-sha1 = "6ab403037779dae8c514bad259f32a447262455a"
 uuid = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
 version = "1.4.4"
+
+[[deps.StatisticalMeasures]]
+deps = ["CategoricalArrays", "CategoricalDistributions", "Distributions", "LearnAPI", "LinearAlgebra", "MacroTools", "OrderedCollections", "PrecompileTools", "REPL", "ScientificTypesBase", "StatisticalMeasuresBase", "Statistics", "StatsBase"]
+git-tree-sha1 = "dc12e34f7d4b298c6349e629b818d93cb9bdec43"
+uuid = "a19d573c-0a75-4610-95b3-7071388c7541"
+version = "0.3.7"
+
+    [deps.StatisticalMeasures.extensions]
+    LossFunctionsExt = "LossFunctions"
+    ScientificTypesExt = "ScientificTypes"
+
+    [deps.StatisticalMeasures.weakdeps]
+    LossFunctions = "30fc2ffe-d236-52d8-8643-a9d8f7c094a7"
+    ScientificTypes = "321657f4-b219-11e9-178b-2701a2544e81"
+
+[[deps.StatisticalMeasuresBase]]
+deps = ["CategoricalArrays", "InteractiveUtils", "MLUtils", "MacroTools", "OrderedCollections", "PrecompileTools", "ScientificTypesBase", "Statistics"]
+git-tree-sha1 = "b833adc23afcdaf47029eb2dc7cde8e9d7aceedd"
+uuid = "c062fc1d-0d66-479b-b6ac-8b44719de4cc"
+version = "0.1.4"
+
+[[deps.StatisticalTraits]]
+deps = ["ScientificTypesBase"]
+git-tree-sha1 = "d3ddfea0085bf97e01fbe8dadf83df7d60a0aa43"
+uuid = "64bff920-2084-43da-a3e6-9bb72801c0c9"
+version = "3.6.0"
 
 [[deps.Statistics]]
 deps = ["LinearAlgebra"]
@@ -1512,26 +3626,36 @@ uuid = "f3b207a7-027a-5e70-b257-86293d7955fd"
 version = "0.15.8"
 
 [[deps.StringManipulation]]
-deps = ["PrecompileTools"]
-git-tree-sha1 = "773065c6e0e903924a9d838259be74338422aef2"
+deps = ["PrecompileTools", "StyledStrings"]
+git-tree-sha1 = "9e3a02d73a8f0a9be04e677dbef758aab40f8bea"
 uuid = "892a3eda-7b42-436c-8928-eab12a02cf0e"
-version = "0.5.0"
+version = "0.6.1"
+
+[[deps.StructArrays]]
+deps = ["ConstructionBase", "DataAPI", "Tables"]
+git-tree-sha1 = "ad8002667372439f2e3611cfd14097e03fa4bccd"
+uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
+version = "0.7.3"
+weakdeps = ["Adapt", "GPUArraysCore", "KernelAbstractions", "LinearAlgebra", "SparseArrays", "StaticArrays"]
+
+    [deps.StructArrays.extensions]
+    StructArraysAdaptExt = "Adapt"
+    StructArraysGPUArraysCoreExt = ["GPUArraysCore", "KernelAbstractions"]
+    StructArraysLinearAlgebraExt = "LinearAlgebra"
+    StructArraysSparseArraysExt = "SparseArrays"
+    StructArraysStaticArraysExt = "StaticArrays"
 
 [[deps.StructUtils]]
 deps = ["Dates", "UUIDs"]
 git-tree-sha1 = "2d0fc55c61321ba245c47be599570d11bac50303"
 uuid = "ec057cc2-7a8d-4b58-b3b3-92acb9f63b42"
 version = "2.8.5"
+weakdeps = ["Measurements", "StaticArraysCore", "Tables"]
 
     [deps.StructUtils.extensions]
     StructUtilsMeasurementsExt = ["Measurements"]
     StructUtilsStaticArraysCoreExt = ["StaticArraysCore"]
     StructUtilsTablesExt = ["Tables"]
-
-    [deps.StructUtils.weakdeps]
-    Measurements = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
-    StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
-    Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 
 [[deps.StyledStrings]]
 uuid = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
@@ -1590,10 +3714,20 @@ git-tree-sha1 = "0c45878dcfdcfa8480052b6ab162cdd138781742"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.11.3"
 
+[[deps.URIs]]
+git-tree-sha1 = "908fec9df6c5de98548ead82a468c95ccf6cd263"
+uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
+version = "1.7.0"
+
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 version = "1.11.0"
+
+[[deps.UnPack]]
+git-tree-sha1 = "387c1f73762231e86e0c9c5443ce3b4a0a9a0c2b"
+uuid = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
+version = "1.0.2"
 
 [[deps.Unicode]]
 uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
@@ -1604,6 +3738,15 @@ deps = ["REPL"]
 git-tree-sha1 = "53915e50200959667e78a92a418594b428dffddf"
 uuid = "1cfade01-22cf-5700-b092-accc4b62d6e1"
 version = "0.4.1"
+
+[[deps.UnsafeAtomics]]
+git-tree-sha1 = "21b39bfb1fab6156b61fbcba4c86c57b6216d2c3"
+uuid = "013be700-e6cd-48c3-b4a1-df204f14c38f"
+version = "0.3.2"
+weakdeps = ["LLVM"]
+
+    [deps.UnsafeAtomics.extensions]
+    UnsafeAtomicsLLVM = ["LLVM"]
 
 [[deps.Unzip]]
 git-tree-sha1 = "ca0969166a028236229f63514992fc073799bb78"
@@ -1806,6 +3949,32 @@ git-tree-sha1 = "446b23e73536f84e8037f5dce465e92275f6a308"
 uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"
 version = "1.5.7+1"
 
+[[deps.Zygote]]
+deps = ["AbstractFFTs", "ChainRules", "ChainRulesCore", "DiffRules", "Distributed", "FillArrays", "ForwardDiff", "GPUArraysCore", "IRTools", "InteractiveUtils", "LinearAlgebra", "LogExpFunctions", "MacroTools", "NaNMath", "PrecompileTools", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "ZygoteRules"]
+git-tree-sha1 = "a1ec45a8a0adee4d581a37f7e1a0fb401c1cb113"
+uuid = "e88e6eb3-aa80-5325-afca-941959d7151f"
+version = "0.7.13"
+
+    [deps.Zygote.extensions]
+    ZygoteAtomExt = "Atom"
+    ZygoteCUDAExt = "CUDA"
+    ZygoteColorsExt = "Colors"
+    ZygoteDistancesExt = "Distances"
+    ZygoteTrackerExt = "Tracker"
+
+    [deps.Zygote.weakdeps]
+    Atom = "c52e3926-4ff0-5f6e-af25-54175e0327b1"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
+    Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
+    Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
+
+[[deps.ZygoteRules]]
+deps = ["ChainRulesCore", "MacroTools"]
+git-tree-sha1 = "c6a86c133861234450ab260dee01b42abd604095"
+uuid = "700de1a5-db45-46bc-99cf-38207098b444"
+version = "0.2.8"
+
 [[deps.eudev_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "c3b0e6196d50eab0c5ed34021aaa0bb463489510"
@@ -1920,6 +4089,8 @@ version = "1.13.0+0"
 
 # ╔═╡ Cell order:
 # ╠═e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
+# ╠═d779c071-1218-45cc-ae66-16e01e12e1e3
+# ╠═2207c531-a82f-48a7-b5bc-e10918390456
 # ╟─f92de274-9c7f-4ea2-84a5-d18f97044498
 # ╟─3426ad4c-a340-46c3-994a-0e30dccef086
 # ╟─b078a14b-049e-4398-9c79-85ef7fde2843
@@ -1928,6 +4099,40 @@ version = "1.13.0+0"
 # ╟─653ae9d0-bca6-4778-a8d3-9d07dbf143c2
 # ╟─e346bbf0-066e-4de6-bcdd-6c2732756d17
 # ╟─5a3a0107-bed6-440a-9805-5a2b9b483b72
-# ╠═af1af019-a784-4144-a632-e66fca8b1c3b
+# ╟─af1af019-a784-4144-a632-e66fca8b1c3b
+# ╟─6f6e6ca0-f018-4ddd-b8e9-61dd05f00560
+# ╟─31d5dc1e-5f96-4841-9ce1-1877ca215454
+# ╟─2a218ae9-897e-4f89-8895-87826b38d47a
+# ╟─139075ff-92d9-480a-b53b-4bca487b100f
+# ╟─d05b79c4-0235-45a1-933d-c8147e7b0e0b
+# ╟─3b280832-9ad9-437c-becd-e79eb3a51e91
+# ╟─d7f18f6d-7669-402c-8814-aa0d5a7c39d2
+# ╟─59bf7ef6-c3bf-4cf5-96ef-36335f333327
+# ╟─bfe3596d-1e7d-4185-a30e-c1a67be1437e
+# ╟─f8b61b60-4229-465c-994d-1ddd42cfd267
+# ╠═9c345444-d08d-4505-82f4-4a3cde530380
+# ╠═d3e26b8b-af93-4411-9c1b-c748d1b5d0b0
+# ╠═35e64b37-084f-4698-9a18-6badc97c26d2
+# ╟─7dbc925c-4da9-4bba-9872-b784588925f2
+# ╟─e02c033f-ef23-4b32-817a-9ff5391ba7fa
+# ╟─cf9e632f-7903-44a0-91a8-be00716e149c
+# ╟─44b0287f-a0ab-4a50-9759-c710d1a83083
+# ╠═613283d8-962c-4b46-ac4d-548c2059c511
+# ╟─eb08c937-ac10-4ce0-9474-c1b65900c48c
+# ╠═1769db6e-35f5-4c79-82e0-6794ea11b347
+# ╠═a1b1717b-c6eb-4b72-a0de-35972e8ea718
+# ╠═e2f6d11f-b1d4-4cd8-ade9-d0b8215acc27
+# ╟─3cde7233-438d-4cb4-aeac-ef6cadb7e22d
+# ╟─661416fe-494a-4057-ab7b-8b1bf6173a9e
+# ╟─49ba444f-c820-469b-98e3-8d11f61b5229
+# ╟─f5353a5f-ff02-4d3c-81d1-b54355d898f7
+# ╠═d1ce4302-d470-42d2-923f-a27aa37a411e
+# ╟─d3b4eed4-e5f1-4cdf-b8ca-88c66c9edb43
+# ╟─920b4200-3b99-48e9-906e-d637bfdacb08
+# ╟─31d24c17-120a-4996-9d97-df960ef02a04
+# ╟─e03990da-c44e-4bc5-bb1c-a183fe838ac4
+# ╟─1b022b5f-635e-446a-9fb5-a7fdac9f1a7e
+# ╟─d978e03b-5188-41a3-ba0e-1586f049659f
+# ╟─96546945-c144-4d79-85dc-780eb6aac97f
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
