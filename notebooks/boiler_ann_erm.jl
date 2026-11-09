@@ -1241,7 +1241,7 @@ function plot_ann_results(
     )
 
     # ------------------------------------------------------------
-    # Plot 3: Cutoff tradeoff plot
+    # Plot 3: Precision, recall, and accuracy by cutoff
     # ------------------------------------------------------------
     cutoff_plot_data = sort(cutoff_results, :cutoff)
 
@@ -1252,10 +1252,9 @@ function plot_ann_results(
         marker = :circle,
         markersize = 6,
         linewidth = 3,
-        label = "Correctly Flagged Rate",
+        label = "Precision",
         xlabel = "P(NeedsAction) Cutoff",
         ylabel = "Metric Value",
-        #title = "Assessment Selection Tradeoff",
         xlims = (0, 1),
         ylims = (0, 1),
         legend = :right,
@@ -1263,7 +1262,7 @@ function plot_ann_results(
         titlefontsize = 40,
         guidefontsize = 30,
         tickfontsize = 24,
-        legendfontsize = 18,
+        legendfontsize = 20,
 
         size = (1200, 1000),
         dpi = 200,
@@ -1271,7 +1270,7 @@ function plot_ann_results(
         left_margin = 28mm,
         bottom_margin = 20mm,
         top_margin = 14mm,
-        right_margin = 42mm,
+        right_margin = 32mm,
     )
 
     plot!(
@@ -1282,18 +1281,18 @@ function plot_ann_results(
         marker = :circle,
         markersize = 6,
         linewidth = 3,
-        label = "NeedsAction Detection Rate",
+        label = "Recall",
     )
 
     plot!(
         cutoff_plot,
         cutoff_plot_data.cutoff,
-        cutoff_plot_data.flagged_fraction;
+        cutoff_plot_data.accuracy;
         color = :steelblue,
         marker = :circle,
         markersize = 6,
         linewidth = 3,
-        label = "Assessment-Priority Rate",
+        label = "Accuracy",
     )
 
     # ------------------------------------------------------------
@@ -1397,7 +1396,7 @@ begin
 
     #savefig(p1, "ANN_Probabilities_By_Region.png")
     #savefig(p2, "ANN_Prediction_Reliabilty.png")
-    #savefig(p3, "ANN_Cutoff_Tradeoff.png")
+    savefig(p3, "ANN_Cutoff_Tradeoff.png")
 end
 
 # ╔═╡ d3b4eed4-e5f1-4cdf-b8ca-88c66c9edb43
@@ -4125,7 +4124,7 @@ version = "1.13.0+0"
 # ╟─3cde7233-438d-4cb4-aeac-ef6cadb7e22d
 # ╟─661416fe-494a-4057-ab7b-8b1bf6173a9e
 # ╟─49ba444f-c820-469b-98e3-8d11f61b5229
-# ╟─f5353a5f-ff02-4d3c-81d1-b54355d898f7
+# ╠═f5353a5f-ff02-4d3c-81d1-b54355d898f7
 # ╠═d1ce4302-d470-42d2-923f-a27aa37a411e
 # ╟─d3b4eed4-e5f1-4cdf-b8ca-88c66c9edb43
 # ╟─920b4200-3b99-48e9-906e-d637bfdacb08

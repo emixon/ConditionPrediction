@@ -503,7 +503,7 @@ Table \ref{tab:ann-baseline-performance} shows the baseline results.  For a mode
 
 Since the dataset is considerably imbalanced (i.e. $\approx$ 79\% of data is "DoNothing" and $\approx$ 21\% is "NeedsAction"), one could imagine a classifier that only returns "DoNothing" would be accurate 79\% of the time.  The imbalance provides a probability based baseline for evaluating log loss. Rather than assigning a hard "DoNothing" label to every boiler, a prevalence only model assigns the same probability distribution to every observation based only on the observed frequency in the training data (DoNothing: $\approx$ 79\%, NeedsAction: $\approx$ 21\%) regardless of any parameter values. This prevalence only model produced a log loss of 0.5237. The baseline ANN achieved a lower held out log loss of 0.4014, indicating that its feature informed probability estimates were better than simply using the overall proportion of "NeedsAction" observations. The reduction in log loss was approximately 23.4\%.
 
-Additionally, the probability output was converted to a raw classification with an initial naive cutoff of .5 (pick the class with P() > .5) to determine if the ANN can provide better classification performance than the always "DoNothing" model. The ANN achieved a precision of 0.713, meaning that approximately 71\% of boilers flagged as "NeedsAction" were observed in that region. Recall was 0.401, meaning that the model identified approximately 40\% of all observed "NeedsAction" cases at that cutoff. The overall classification accuracy was 0.835, which is a roughly 5\% improvement over simply guessing "DoNothing" for all predictions.
+Additionally, the probability output was converted to a raw classification with an initial naive cutoff of .5 ($P(NeedsAction) > .5$) to determine if the ANN can provide better classification performance than the always "DoNothing" model. The ANN achieved a precision of 0.713, meaning that approximately 71\% of boilers flagged as "NeedsAction" were observed in that region. Recall was 0.401, meaning that the model identified approximately 40\% of all observed "NeedsAction" cases at that cutoff. The overall classification accuracy was 0.835, which is a roughly 5\% improvement over simply guessing "DoNothing" for all predictions.
 
 \begin{table}[htbp]
 \centering
@@ -524,9 +524,9 @@ Accuracy at 0.50 cutoff & 0.834762 \\
 \end{tabular}
 \end{table}
 
-With the baseline developed, a series of experiments were performed to improve upon the initial hyperparameter selection.  Iterative tests were performed by doing sweeps of different values of one parameter at a time, choosing the best performer, then iterating the same tests on another individual parameter.  Successive tests would utilize the best overall combinations of parameters.  Table \ref{tab:ann-tuning} summarizes the number of experiments performed.  Baseline epochs, batch size, and Optimizer selection proved to be the best performing options while $\lambda$, Learning Rate, and hidden layer configuration parameters were updated.  Overall performance gains were rather minimal.  Interestingly, experiments in hidden layer architecture revealed the best performance in one very large hidden layer as opposed to additional layers. 40 architecture selections were tried, and shallow networks consistently outperformed deep networks. Experiments with utilizing PCA projected data as input into the model were also performed, however this resulted in slightly worse model performance and was therefore omitted from the final configuration. Table \ref{tab:ann-configuration} shows the finalized configuration with the best performance found.  As an additional note, randomization was initialized with a hardcoded seed to ensure experimentation was repeatable and comparable.
+With the baseline developed, a series of experiments were performed to improve upon the initial hyperparameter selection.  Iterative tests were performed by doing sweeps of different values of one parameter at a time, choosing the best performer, then iterating the same tests on another individual parameter.  Successive tests would utilize the best overall combinations of parameters.  Table \ref{tab:ann-tuning} summarizes the number of experiments performed.  Baseline epochs, batch size, and optimizer selection proved to be the best performing options while $\lambda$, Learning Rate, and hidden layer configuration parameters were updated.  Overall performance gains were rather minimal.  Interestingly, experiments in hidden layer architecture revealed the best performance in one very large hidden layer as opposed to additional layers. 40 architecture selections were tried, and shallow networks consistently outperformed deep networks. Experiments with utilizing PCA projected data as input into the model were also performed, however this resulted in slightly worse model performance and was therefore omitted from the final configuration. Table \ref{tab:ann-configuration} shows the finalized configuration with the best performance found.  As an additional note, randomization was initialized with a hardcoded seed to ensure experimentation was repeatable and comparable.
 
-With hyperparameters tuned, the final stage of experimentation was variable feature selection. Trials of over 100 feature combinations where performed and the final (best performing) ANN feature selection used RSL, NormalizedAge, EffectiveAge, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate. This includes many more parameters than our hypothesized options during exploratory analysis.  While the performance difference was minimal, inclusion of all lifecycle parameters still resulted in lower log loss. The only omitted parameters were Qty, AssetAge, AssetDesignLife, and PercentGreen. 
+With hyperparameters tuned, the final stage of experimentation was variable feature selection. Trials of over 100 feature combinations were performed and the final (best performing) ANN feature selection used RSL, NormalizedAge, EffectiveAge, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate. This includes many more parameters than our hypothesized options during exploratory analysis.  While the performance difference was minimal, inclusion of all lifecycle parameters still resulted in lower log loss. The only omitted parameters were Qty, AssetAge, AssetDesignLife, and PercentGreen. 
 
 \begin{table}[htbp]
 \centering
@@ -570,8 +570,7 @@ Cross-validation & Five-fold stratified cross-validation \\
 \end{tabular}
 \end{table}
 
-%TODO
-Place some wrap up comments here referencing final performance and discussing the three plots and their implications.
+Table \ref{tab:ann-performance} shows the resulting tuned performance. Final results improved held out test log loss from 0.4014 to 0.3885 and improved the relative reduction from a prevalence-only baseline from 23.4\% to 25.8\%.  Precision and recall (with cutoff threshold at $P(NeedsAction) > .5$) shifted toward a slight decrease in false positives (higher precision) and increase in "DoNothing" labels for actual "NeedsAction" (lower recall). Figure \ref{fig:ann_cutoff_tradeoff} shows a threshold selection tradeoff when considering cutoff between .2 and .9; reasonable selections could vary between .3 and .5 depending on decision maker priority. Figure \ref{fig:ann_probs_by_region} further emphasizes that range as it becomes more clear (at least visually) that classification becomes most distinguished within those probability cutoffs. Additionally, Figure \ref{fig:ann_probs_by_region} also shows that for boilers that were observed in "DoNothing", predominately low $P(NeedsAction)$ values are assigned (a desirable outcome); however, boilers observed in "NeedsAction" remain assigned more evenly distributed $P(NeedsAction)$ values with a slightly observed bias toward low probabilities. This shows that the model still struggles to create a fully clear distinction between the two categories.
 
 \begin{table}[htbp]
 \centering
@@ -594,23 +593,27 @@ Accuracy at 0.50 cutoff & 0.833593 \\
 
 \begin{figure}
 \centering
+\includegraphics[width=.8\linewidth]{ANN_Cutoff_Tradeoff.png}
+\caption{Classifier Threshold Selection Tradeoff}
+\label{fig:ann_cutoff_tradeoff}
+\end{figure}
+
+\begin{figure}
+\centering
 \includegraphics[width=.8\linewidth]{ANN_Probabilities_By_Region.png}
 \caption{Predicted Probability by Observed Region}
 \label{fig:ann_probs_by_region}
 \end{figure}
+
+\FloatBarrier
+
+Figure \ref{fig:ann_prediction_reliability} compares binned mean predicted "NeedsAction" probabilities with the observed "NeedsAction" frequency within each bin. Points near the diagonal indicate probability ranges where the ANN predictions approximately matched the observed frequency, while deviations from the diagonal indicate probability ranges where the model over or under estimated the $P(NeedsAction)$ rate.  Overall, very little deviation from optimal calibration is observed, indicating that despite the lack of clear distinction between "DoNothing" and "NeedsAction" the frequencies of detection are consistent with the data.  This may point to a consistency with the randomness of the real world, relatively new equipment may have faults and failures, but equipment that has operated well for the first few years tends to not have as many failures throughout the rest of its design life. It may also be explained by other unobserved characteristics or variation in assessment outcomes.  Final conclusions of the ANN approach support that the model is a practical and useful improvement over the prevalence-only probability baseline.
 
 \begin{figure}
 \centering
 \includegraphics[width=.8\linewidth]{ANN_Prediction_Reliabilty.png}
 \caption{Calibration of Predicted Probabilities}
 \label{fig:ann_prediction_reliability}
-\end{figure}
-
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{ANN_Cutoff_Tradeoff.png}
-\caption{Assessment Selection Tradeoff}
-\label{fig:ann_cutoff_tradeoff}
 \end{figure}
 
 \FloatBarrier
