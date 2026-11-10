@@ -346,12 +346,15 @@ end
 
 # ╔═╡ ad5ad4d4-cf9c-4883-9ade-2d517c8080f1
 begin
-    performance = DataFrame([
-        merge((Model="Decision tree — training",), classification_metrics(p_train, ytrain)),
-        merge((Model="Decision tree — OOF training",), classification_metrics(tuning.oof, ytrain)),
-        merge((Model="Decision tree — held-out test",), test_metrics),
-    ])
-    select(performance, :Model, :Accuracy, :Precision, :Recall, :F1, :LogLoss)
+    predictions_percent = DataFrame(
+        SourceRow = results.source_row,
+        ActualClass = results.actual_class,
+        DoNothing_pct = round.(100 .* results.p_do_nothing; digits=2),
+        NeedsAction_pct = round.(100 .* results.p_needs_action; digits=2),
+        PredictedClass = results.predicted_class,
+    )
+
+    first(predictions_percent, min(10, nrow(predictions_percent)))
 end
 
 # ╔═╡ eaab2057-3995-4816-9c8d-814c9eccddc3
