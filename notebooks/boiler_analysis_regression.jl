@@ -658,7 +658,12 @@ md"""
 
 # ╔═╡ 544b0f7b-a9bb-4577-8c01-0e184b3570bc
 md"""
-### Using LM (Ordinary Least-Squares Regression)
+### Ordinary Least-Squares Regression
+"""
+
+# ╔═╡ 8d1b932b-bfdc-4534-9d15-0f7a9c7b88fd
+md"""
+Tutorial source: https://juliaai.github.io/DataScienceTutorials.jl/isl/lab-3/
 """
 
 # ╔═╡ d92cc684-54ec-451a-bbee-080cbd997247
@@ -674,7 +679,7 @@ end
 
 # ╔═╡ 048bf2a8-49f6-4e8b-929b-eb75b0efee69
 begin   
-    lm_vars = [
+    reg_vars = [
             :Score,
             :RSL,
             :Recency,
@@ -689,42 +694,59 @@ begin
             :Climate
         ]
 
-    X_lm = select(boilers, lm_vars)
+    df_reg = select(boilers, reg_vars)
+    df_train, df_test = partitionTrainTest(df_reg, 0.8)
+
+    X_train = select(df_train, Not(:Score))
+    y_train = df_train.Score
+
+    X_test = select(df_test, Not(:Score))
+    y_test = df_test.Score
+    
 end
 
-# ╔═╡ e69a7dd1-ed48-4721-972f-91cbf1fc6c66
-lm_train, lm_test = partitionTrainTest(X_lm, 0.8)
+# ╔═╡ 17cfa049-0fee-49a0-b836-c8891bfd8a3d
+mdl_ols = LinearRegressor()
 
-# ╔═╡ 18dce7af-f6fc-4b09-a4e1-927dba13e18e
-lm_model = lm(@formula(Score ~ RSL + Recency + PrevScore + PrevAssessed + Qty + AssetAge + AssetDesignLife + LogCRV + Month + Year + Climate), lm_train)
-
-# ╔═╡ 86f70a63-cb47-4361-8009-3d393205b8be
-println(lm_model)
-
-# ╔═╡ fb541f8a-ea9c-4b5e-961b-1a373b51cbd3
-y_pred = predict(lm_model, lm_test)
-
-# ╔═╡ fd819d2e-4d5b-4551-9009-de0499ec7cef
+# ╔═╡ 342297e1-fa1e-47bc-aa66-bbba4323d30c
 begin
-	actual = lm_test.Score
-	residuals = actual .- y_pred
-	
-	# Root Mean Squared Error (RMSE)
-	rmse = sqrt(mean(residuals .^ 2))
-	println(rmse)
-	
-	# Mean Absolute Error (MAE)
-	mae = mean(abs.(residuals))
-	println(mae)
-	
-	# Out-of-sample R-squared (R²)
-	ss_res = sum(residuals .^ 2)
-	ss_tot = sum((actual .- mean(actual)) .^ 2)
-	r2_test = 1 - (ss_res / ss_tot)
-	println(r2_test)
+    mach = machine(mdl_ols, X_train, y_train, scitype_check_level=0)
+    fit!(mach)
+
+    fp = fitted_params(mach)
+    coefs = fp.coefs
+    intercept = fp.intercept
+    for (name, val) in coefs
+        println("$(rpad(name, 8)):  $(round(val, sigdigits=3))")
+    end
+    println("Intercept: $(round(intercept, sigdigits=3))")
 end
+
+# ╔═╡ 80537988-01be-47f5-9557-9a926a426821
+begin
+	ŷ = MLJ.predict(mach, X_test)
+	round(rms(ŷ, y_test), sigdigits=4)
+end
+
+# ╔═╡ 85daf586-1d93-4bb6-b263-be3e8bc14592
+round(rsq(ŷ, y_test), sigdigits=4)
+
+# ╔═╡ 1a1f1d7b-ff90-4509-9f95-85902ac283f5
+begin
+	res = ŷ .- y_test
+	plot(res, line=:stem, linewidth=1, marker=:circle, legend=false, size=((800,600)))
+	hline!([0], linewidth=2, color=:red)    # add a horizontal line at x=0
+end
+
+# ╔═╡ bb91371c-18d9-4891-8fe5-7284d8d889f0
+histogram(res, normalize=true, size=(800,600), label="residual")
 
 # ╔═╡ 4e752445-177e-486a-b6f1-d0c392b0c8f4
+md"""
+### Ridge Regression
+"""
+
+# ╔═╡ a064fc54-7b97-4135-9b61-2fcee64362b6
 
 
 # ╔═╡ 4b3f6850-db77-4904-880b-edafae19bc0c
@@ -737,21 +759,7 @@ begin
     # matrix for GLM model
     # same as for PCA but *not* transformed
     # also only one life cycle variable included
-     
-    reg_vars = [
-            :RSL,
-            :Recency,
-            :PrevScore,
-            :PrevAssessed,
-            :Qty,
-            :AssetAge,
-            :AssetDesignLife,
-            :LogCRV,
-            :Month,
-            :Year,
-            :Climate
-        ]
-
+  
     # independent variable matrix
     X_GLM = (Matrix(select(boilers,reg_vars)))
 
@@ -840,17 +848,20 @@ md"""
 # ╠═f94307e2-63bb-4268-97d1-f13f48154150
 # ╠═4b87187a-8931-4322-8dbb-5a4a362b5711
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
-# ╠═f7981403-8dbe-40fd-a8f0-b766be8e6c0d
+# ╟─f7981403-8dbe-40fd-a8f0-b766be8e6c0d
 # ╠═544b0f7b-a9bb-4577-8c01-0e184b3570bc
+# ╟─8d1b932b-bfdc-4534-9d15-0f7a9c7b88fd
 # ╠═d92cc684-54ec-451a-bbee-080cbd997247
 # ╠═048bf2a8-49f6-4e8b-929b-eb75b0efee69
-# ╠═e69a7dd1-ed48-4721-972f-91cbf1fc6c66
-# ╠═18dce7af-f6fc-4b09-a4e1-927dba13e18e
-# ╠═86f70a63-cb47-4361-8009-3d393205b8be
-# ╠═fb541f8a-ea9c-4b5e-961b-1a373b51cbd3
-# ╠═fd819d2e-4d5b-4551-9009-de0499ec7cef
-# ╠═4e752445-177e-486a-b6f1-d0c392b0c8f4
-# ╟─4b3f6850-db77-4904-880b-edafae19bc0c
+# ╠═17cfa049-0fee-49a0-b836-c8891bfd8a3d
+# ╠═342297e1-fa1e-47bc-aa66-bbba4323d30c
+# ╠═80537988-01be-47f5-9557-9a926a426821
+# ╠═85daf586-1d93-4bb6-b263-be3e8bc14592
+# ╠═1a1f1d7b-ff90-4509-9f95-85902ac283f5
+# ╠═bb91371c-18d9-4891-8fe5-7284d8d889f0
+# ╟─4e752445-177e-486a-b6f1-d0c392b0c8f4
+# ╠═a064fc54-7b97-4135-9b61-2fcee64362b6
+# ╠═4b3f6850-db77-4904-880b-edafae19bc0c
 # ╠═c4f0042e-dac8-4caf-b983-8bc9678b4d1b
 # ╠═130721f3-90bc-4004-8e78-43ec6ac37b93
 # ╠═197ffaaf-9b37-41e1-b921-cf8106e17e62
