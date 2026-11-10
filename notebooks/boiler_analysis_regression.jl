@@ -698,12 +698,26 @@ begin
     df_reg = mapcols(col -> Float64.(col), df_reg)
     df_train, df_test = partitionTrainTest(df_reg, 0.8)
 
+    
+end
+
+# ╔═╡ 8a6286e9-7b53-43f6-8e6e-0496ac24eea4
+begin
+    # normalize data to common range
+    scalers = Dict(col => StatsBase.fit(UnitRangeTransform, df_train[!, col]) for col in reg_vars)
+    for col in reg_vars
+        df_train[!, col] = StatsBase.transform(scalers[col], df_train[!, col])
+        df_test[!, col]  = StatsBase.transform(scalers[col], df_test[!, col])
+    end
+end
+
+# ╔═╡ c0bfae21-3738-4b40-8e2e-6d44498b96b8
+begin
     X_train = select(df_train, Not(:Score))
     y_train = df_train.Score
-
+    
     X_test = select(df_test, Not(:Score))
     y_test = df_test.Score
-    
 end
 
 # ╔═╡ 17cfa049-0fee-49a0-b836-c8891bfd8a3d
@@ -733,19 +747,14 @@ end
 round(rsq(ŷ, y_test), sigdigits=4)
 
 # ╔═╡ 1a1f1d7b-ff90-4509-9f95-85902ac283f5
-# ╠═╡ disabled = true
-#=╠═╡
 begin
 	res = ŷ .- y_test
 	plot(res, line=:stem, linewidth=1, marker=:circle, legend=false, size=((800,600)))
 	hline!([0], linewidth=2, color=:red)    # add a horizontal line at x=0
 end
-  ╠═╡ =#
 
 # ╔═╡ bb91371c-18d9-4891-8fe5-7284d8d889f0
-#=╠═╡
 histogram(res, normalize=true, size=(800,600), label="residual")
-  ╠═╡ =#
 
 # ╔═╡ 4e752445-177e-486a-b6f1-d0c392b0c8f4
 md"""
@@ -753,7 +762,7 @@ md"""
 """
 
 # ╔═╡ 6413baf0-2c77-4946-9873-c066e3c007c7
-ridge_model = RidgeRegressor(lambda = 1.0)
+ridge_model = RidgeRegressor(lambda = 0.001)
 
 # ╔═╡ a064fc54-7b97-4135-9b61-2fcee64362b6
 begin
@@ -790,8 +799,44 @@ histogram(res_ridge, normalize=true, size=(800,600), label="residual")
 
 # ╔═╡ 4b3f6850-db77-4904-880b-edafae19bc0c
 md"""
-### Using GLM
+### Lasso Regression
 """
+
+# ╔═╡ ee0a8fa5-ae54-442f-af71-aa04fbcd4858
+lasso_model = LassoRegressor(lambda = 0.001)
+
+# ╔═╡ 78ab1354-a828-4efe-ba59-49565b4c4750
+begin
+	mach_lasso = machine(lasso_model, X_train, y_train)
+	fit!(mach_lasso)
+
+    fp_lasso = fitted_params(mach_lasso)
+    coefs_lasso = fp_lasso.coefs
+    intercept_lasso = fp_lasso.intercept
+    for (name, val) in coefs_lasso
+        println("$(rpad(name, 8)):  $(round(val, sigdigits=3))")
+    end
+    println("Intercept: $(round(intercept_lasso, sigdigits=3))")
+end
+
+# ╔═╡ 1989773e-2efd-4f41-b0c3-cfa763a4e424
+begin
+	ŷ_lasso = MLJ.predict(mach_lasso, X_test)
+	round(rms(ŷ_lasso, y_test), sigdigits=4)
+end
+
+# ╔═╡ a3b6ab7a-bcb9-4325-b3ca-f1c08a3807e5
+round(rsq(ŷ_lasso, y_test), sigdigits=4)
+
+# ╔═╡ f9a07554-4e03-475e-9f8e-9bad4e5bd962
+begin
+	res_lasso = ŷ_lasso .- y_test
+	plot(res_lasso, line=:stem, linewidth=1, marker=:circle, legend=false, size=((800,600)))
+	hline!([0], linewidth=2, color=:red)    # add a horizontal line at x=0
+end
+
+# ╔═╡ 439da894-e094-498e-b1b2-0dc31f42bef8
+histogram(res_ridge, normalize=true, size=(800,600), label="residual")
 
 # ╔═╡ c2324815-aa18-43a0-b9f3-cd7dbcde5647
 md"""
@@ -859,6 +904,8 @@ md"""
 # ╟─8d1b932b-bfdc-4534-9d15-0f7a9c7b88fd
 # ╠═d92cc684-54ec-451a-bbee-080cbd997247
 # ╠═048bf2a8-49f6-4e8b-929b-eb75b0efee69
+# ╠═8a6286e9-7b53-43f6-8e6e-0496ac24eea4
+# ╠═c0bfae21-3738-4b40-8e2e-6d44498b96b8
 # ╠═17cfa049-0fee-49a0-b836-c8891bfd8a3d
 # ╠═342297e1-fa1e-47bc-aa66-bbba4323d30c
 # ╠═80537988-01be-47f5-9557-9a926a426821
@@ -872,7 +919,13 @@ md"""
 # ╠═e265624e-cb5c-4308-b577-9b4f53de1f96
 # ╠═0386552b-e143-4e4b-9f4e-33d351ea7823
 # ╠═4745c960-7a1d-40fc-884e-26dc745e606a
-# ╠═4b3f6850-db77-4904-880b-edafae19bc0c
+# ╟─4b3f6850-db77-4904-880b-edafae19bc0c
+# ╠═ee0a8fa5-ae54-442f-af71-aa04fbcd4858
+# ╠═78ab1354-a828-4efe-ba59-49565b4c4750
+# ╠═1989773e-2efd-4f41-b0c3-cfa763a4e424
+# ╠═a3b6ab7a-bcb9-4325-b3ca-f1c08a3807e5
+# ╠═f9a07554-4e03-475e-9f8e-9bad4e5bd962
+# ╠═439da894-e094-498e-b1b2-0dc31f42bef8
 # ╟─c2324815-aa18-43a0-b9f3-cd7dbcde5647
 # ╠═8bc9c3b1-0ffb-451b-bae9-bf3d209355b6
 # ╟─2defcea8-94d2-4182-b313-7b242d185c08
