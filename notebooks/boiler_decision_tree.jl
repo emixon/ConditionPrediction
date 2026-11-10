@@ -357,6 +357,35 @@ begin
     first(predictions_percent, min(10, nrow(predictions_percent)))
 end
 
+# ╔═╡ cb9ed9bf-b7be-40e4-806f-9ebdea329373
+begin
+    performance = DataFrame([
+        merge(
+            (Model="Decision tree — training",),
+            classification_metrics(p_train, ytrain),
+        ),
+        merge(
+            (Model="Decision tree — OOF training",),
+            classification_metrics(tuning.oof, ytrain),
+        ),
+        merge(
+            (Model="Decision tree — held-out test",),
+            test_metrics,
+        ),
+    ])
+
+    performance_percent = DataFrame(
+        Model = performance.Model,
+        Accuracy_pct = round.(100 .* performance.Accuracy; digits=2),
+        Precision_pct = round.(100 .* performance.Precision; digits=2),
+        Recall_pct = round.(100 .* performance.Recall; digits=2),
+        F1_pct = round.(100 .* performance.F1; digits=2),
+        LogLoss = round.(performance.LogLoss; digits=6),
+    )
+
+    performance_percent
+end
+
 # ╔═╡ eaab2057-3995-4816-9c8d-814c9eccddc3
 md"""
 # Confusion Matrix
@@ -2638,6 +2667,7 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╟─a7dba1b2-5d9f-47e7-bffc-e23412ab9673
 # ╟─fc29dbcf-0459-4294-aaa2-8e6655938027
 # ╠═ad5ad4d4-cf9c-4883-9ade-2d517c8080f1
+# ╠═cb9ed9bf-b7be-40e4-806f-9ebdea329373
 # ╟─eaab2057-3995-4816-9c8d-814c9eccddc3
 # ╠═f25e2670-990d-466c-84ad-e3a0bc79b5eb
 # ╟─84177c62-be6f-40c4-a468-2766430d45e5
