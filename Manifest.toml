@@ -2,7 +2,7 @@
 
 julia_version = "1.13.0"
 manifest_format = "2.1"
-project_hash = "937c780f68a90e6bf109fdbbf344e73f1276c9eb"
+project_hash = "6e93f262a30af7a96ccadf2ef1b3ad7d20a7e6f0"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -234,7 +234,7 @@ uuid = "f0e56b4a-5159-44fe-b623-3e5288b988bb"
 version = "2.6.0"
 
 [[deps.ConditionPrediction]]
-deps = ["CSV", "DataFrames", "HypothesisTests", "Pluto", "Statistics", "StatsBase", "StatsPlots"]
+deps = ["CSV", "DataFrames", "HypothesisTests", "Plots", "Pluto", "Statistics", "StatsBase", "StatsPlots"]
 path = "."
 uuid = "e9f27688-7ec8-4827-a727-06782c993f0f"
 version = "0.1.0"

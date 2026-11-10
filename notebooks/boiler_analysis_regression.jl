@@ -7,7 +7,7 @@ using InteractiveUtils
 # ╔═╡ e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
 begin
     import Pkg
-
+    
     Pkg.activate(Base.current_project())
     Pkg.instantiate()
     
@@ -20,6 +20,10 @@ begin
     using HypothesisTests
     using StatsPlots.PlotMeasures: mm
     using PairPlots, Plots
+    using GLM
+    using Random
+    using MLJ
+    using MLJLinearModels
 end
 
 # ╔═╡ 8a745a37-637c-49e7-9b80-a00e35e2134d
@@ -348,211 +352,6 @@ let
     results, GetPCAPlot(8, explained_ratio), GetLoadings(F, pca_vars_single_lf), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true)
 end
 
-# ╔═╡ 7606e704-083e-4a5f-8da5-bcdf3bfa3216
-md"""
-## Two Comparison Groups
-"""
-
-# ╔═╡ 12b33241-044c-4631-a9b9-e9c44e24847a
-begin
-    # Load separate data
-    comparison_data = dropmissing(load_data(path), :Score)
-
-    # Separate observations by assessment score.
-    green_boilers = comparison_data[comparison_data.Score .>= 88, :]
-    notgreen_boilers = comparison_data[comparison_data.Score .< 88, :]
-
-    # Count observations
-    group_summary = DataFrame(
-        Group = ["Green (Score >= 88)", "Not green (Score < 88)"],
-        N = [nrow(green_boilers), nrow(notgreen_boilers)],
-    )
-    # Calculate the percentage
-    group_summary.Percent = round.(
-        100 .* group_summary.N ./ sum(group_summary.N);
-        digits =2,
-    )
-    group_summary
-end
-
-# ╔═╡ 0263eb8b-4e72-4ebc-988b-e524302c2d6a
-md"""
-## Two Comparison Groups
-
-Assessment records are divided into green (`Score ≥ 88`) and not-green (`Score < 88`) groups based on the current assessment score. Records without a current score are excluded because their condition status cannot be assigned. The summary table reports the number and percentage of observations in each group, establishing the distribution of condition status before examining lifecycle characteristics, assessment history, asset age, and climate. Since unequal group sizes can make comparisons based on raw counts misleading, the subsequent figures use proportions to compare distributions and condition percentages. Sample-size labels indicate the number of observations supporting each comparison. These counts represent assessment records rather than necessarily distinct boilers.
-"""
-
-# ╔═╡ 5d26ccac-1d20-44f7-8696-440e91eeabf1
-md"""
-## Interesting Plot 1
-"""
-
-# ╔═╡ e7fae12f-3e0b-4e9f-a874-4cb0db599494
-interesting_plot1 = let
-    function compare_histogram(variable, heading)
-        green = filter(isfinite, collect(skipmissing(green_boilers[!, variable])))
-        notgreen = filter(isfinite, collect(skipmissing(notgreen_boilers[!, variable])))
-
-        if isempty(green) || isempty(notgreen)
-            error("Both groups need recorded values for $variable.")
-        end
-
-        # Use matching bin boundaries.
-        low, high = extrema(vcat(green, notgreen))
-        if low == high
-            low -= 0.5
-            high += 0.5
-        end
-        edges = range(low, nextfloat(Float64(high)); length=31)
-
-        histogram([green, notgreen];
-            bins=edges, normalize=:probability, alpha=0.5,
-            label=["Green (n=$(length(green)))" "Not green (n=$(length(notgreen)))"],
-            title=heading, xlabel=heading, ylabel="Proportion within group",
-        )
-    end
-
-    plot(
-        compare_histogram(:RSL, "Remaining Service Life"),
-        compare_histogram(:PrevScore, "Previous Assessment Score");
-        layout=(1, 2), size=(1200, 600),
-        legend=:outertop, legend_column=2, legendfontsize=9,
-        titlefontsize=13, guidefontsize=11, tickfontsize=10,
-        margin=6Plots.mm, left_margin=10Plots.mm, bottom_margin=12Plots.mm,
-    )
-end
-
-# ╔═╡ bb5b17b7-ad96-4e96-b67c-dc06c1875caf
-md"""
-## Interesting Plot 1
-
-Remaining service life (`RSL`) and previous assessment score (`PrevScore`) are compared between the green and not-green groups to examine differences in lifecycle characteristics and assessment history. RSL provides a lifecycle measure, while the previous score allows earlier condition to be examined alongside the current classification. Identical bin boundaries and proportions calculated separately within each group support comparison despite unequal sample sizes. A bar height of 0.20 therefore represents 20% of the available observations in that condition group, not 20% of the complete dataset. Differences in concentration, spread, and overlap indicate how the recorded properties distinguish the groups without establishing predictive performance. Missing and nonfinite values are excluded separately for each variable, so the previous-score panel includes only records with a usable previous assessment.
-"""
-
-# ╔═╡ 345182d1-e582-4498-ad3a-daed465891ec
-md"""
-## Interesting Plot 2
-"""
-
-# ╔═╡ 9c2bd780-dca9-4778-8ae3-58003769aefb
-interesting_plot2 = let
-    d = dropmissing(comparison_data, :AssetAge)
-    d = d[isfinite.(d.Score) .& isfinite.(d.AssetAge), :]
-
-    edges = [0, 10, 20, 30, 40, Inf]
-    ages = ["0–<10", "10–<20", "20–<30", "30–<40", "40+"]
-    green = Float64[]
-    labels = String[]
-
-    for i in eachindex(ages)
-        scores = d.Score[(d.AssetAge .>= edges[i]) .& (d.AssetAge .< edges[i + 1])]
-        push!(green, isempty(scores) ? NaN : 100 * mean(scores .>= 88))
-        push!(labels, "$(ages[i])\n(n=$(length(scores)))")
-    end
-    notgreen = 100 .- green
-
-    plot(1:length(ages), [green notgreen];
-        label=["Green" "Not green"], legend=:outertop, legend_column=2,
-        markershape=[:circle :diamond], linestyle=[:solid :dash], linewidth=3,
-        xticks=(1:length(ages), labels), xlims=(0.5, length(ages) + 0.5),
-        ylims=(-3, 103), yticks=0:20:100,
-        title="Green vs Not Green Across Asset-Age Groups",
-        xlabel="Asset-Age Group", ylabel="Assessments within age group (%)",
-        size=(1000, 600), titlefontsize=13, guidefontsize=12, tickfontsize=11,
-        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=14Plots.mm,
-    )
-end
-
-# ╔═╡ d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
-md"""
-## Interesting Plot 2
-
-Green and not-green percentages are compared within five asset-age intervals: 0–<10, 10–<20, 20–<30, 30–<40, and 40+. Unlike Plot 1, which examines variable distributions within condition groups, this figure examines condition proportions within age groups. Each percentage is calculated using the total number of eligible assessments in its age interval, allowing differences in condition status to be distinguished from differences in the number of available records. The two percentages sum to 100% for each interval containing observations, and the sample-size labels provide context for interpreting the comparison. Although the points are connected, they represent separate groups of assessment records rather than deterioration tracked for individual boilers over time. The broad intervals, particularly the open-ended 40+ category, should also be considered when interpreting age-related patterns.
-"""
-
-# ╔═╡ d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
-md"""
-## Interesting Plot 3
-"""
-
-# ╔═╡ 4757dd14-b688-49cc-8e73-3878eceff35e
-begin
-    climate_codes = sort(unique(string.(coalesce.(comparison_data.Climate, "Unknown"))))
-
-    function climate_plot(data, heading)
-        d = data[isfinite.(data.Score), :]
-        climate = string.(coalesce.(d.Climate, "Unknown"))
-        green = Float64[]
-        labels = String[]
-
-        for code in climate_codes
-            scores = d.Score[climate .== code]
-            push!(green, isempty(scores) ? NaN : 100 * mean(scores .>= 88))
-            push!(labels, "$code\n(n=$(length(scores)))")
-        end
-        notgreen = 100 .- green
-
-        p = groupedbar(1:length(climate_codes), [green notgreen];
-            bar_position=:stack, bar_width=0.65, fillalpha=0.6, linewidth=0,
-            label=["Green" "Not green"], legend=:outertop, legend_column=2,
-            xticks=(1:length(climate_codes), labels),
-            xlims=(0.5, length(climate_codes) + 0.5),
-            title=heading, xlabel="Climate Code", ylabel="Assessments (%)",
-            size=(max(1100, 140 * length(climate_codes)), 650), grid=false,
-            titlefontsize=13, guidefontsize=12, tickfontsize=11,
-            margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
-        )
-        plot!(p; ylims=(0, 110), yticks=0:20:100, ywiden=false)
-
-        # Place small-percentage labels above the bar.
-        function add_percentage(i, value, y, group)
-            label = "$(round(value; digits=1))%"
-            if value < 8
-                y = 105
-                label = "$group: $label"
-            end
-            annotate!(p, i, y, text(label, 10))
-        end
-
-        for i in eachindex(green)
-            if isnan(green[i])
-                annotate!(p, i, 50, text("No data", 10))
-            else
-                add_percentage(i, notgreen[i], notgreen[i] / 2, "Not green")
-                add_percentage(i, green[i], notgreen[i] + green[i] / 2, "Green")
-            end
-        end
-        p
-    end
-
-    interesting_plot3 = climate_plot(comparison_data, "Green vs Not Green by Climate")
-end
-
-# ╔═╡ d0b92a37-92ed-4ce4-85cb-beba9eaab65a
-md"""
-## Interesting Plot 4
-"""
-
-# ╔═╡ 8eeb40e8-93cd-410b-b6d7-30fa362dca6e
-interesting_plot4 = let
-    d = dropmissing(comparison_data, :AssetAge)
-    d = d[isfinite.(d.AssetAge), :]
-
-    function age_plot(low, high, heading)
-        rows = (d.AssetAge .>= low) .& (d.AssetAge .< high)
-        climate_plot(d[rows, :], "Asset Age: $heading")
-    end
-
-    plot(
-        age_plot(0, 10, "0–<10"), age_plot(10, 20, "10–<20"),
-        age_plot(20, 30, "20–<30"), age_plot(30, 40, "30–<40"),
-        age_plot(40, Inf, "40+");
-        layout=(5, 1), size=(max(1100, 140 * length(climate_codes)), 2700),
-        ylims=(0, 110), yticks=0:20:100, ywiden=false,
-        margin=6Plots.mm, left_margin=12Plots.mm, bottom_margin=16Plots.mm,
-    )
-end
-
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 md"""
 ## Pairwise Correlation Analysis
@@ -852,13 +651,133 @@ md"""
 # Predictive Models
 """
 
-# ╔═╡ e553e6b3-7b8e-4029-b823-eb98362c49a4
+# ╔═╡ f7981403-8dbe-40fd-a8f0-b766be8e6c0d
 md"""
-## Artificial Neural Network (ANN) Predictive Model
+## Linear Regression
+"""
+
+# ╔═╡ 544b0f7b-a9bb-4577-8c01-0e184b3570bc
+md"""
+### Using LM (Ordinary Least-Squares Regression)
+"""
+
+# ╔═╡ d92cc684-54ec-451a-bbee-080cbd997247
+# code snippet from: https://discourse.julialang.org/t/simple-tool-for-train-test-split/473/3
+
+function partitionTrainTest(data, at = 0.8)
+    n = nrow(data)
+    idx = shuffle(1:n)
+    train_idx = view(idx, 1:floor(Int, at*n))
+    test_idx = view(idx, (floor(Int, at*n)+1):n)
+    data[train_idx,:], data[test_idx,:]
+end
+
+# ╔═╡ 048bf2a8-49f6-4e8b-929b-eb75b0efee69
+begin   
+    lm_vars = [
+            :Score,
+            :RSL,
+            :Recency,
+            :PrevScore,
+            :PrevAssessed,
+            :Qty,
+            :AssetAge,
+            :AssetDesignLife,
+            :LogCRV,
+            :Month,
+            :Year,
+            :Climate
+        ]
+
+    X_lm = select(boilers, lm_vars)
+end
+
+# ╔═╡ e69a7dd1-ed48-4721-972f-91cbf1fc6c66
+lm_train, lm_test = partitionTrainTest(X_lm, 0.8)
+
+# ╔═╡ 18dce7af-f6fc-4b09-a4e1-927dba13e18e
+lm_model = lm(@formula(Score ~ RSL + Recency + PrevScore + PrevAssessed + Qty + AssetAge + AssetDesignLife + LogCRV + Month + Year + Climate), lm_train)
+
+# ╔═╡ 86f70a63-cb47-4361-8009-3d393205b8be
+println(lm_model)
+
+# ╔═╡ fb541f8a-ea9c-4b5e-961b-1a373b51cbd3
+y_pred = predict(lm_model, lm_test)
+
+# ╔═╡ fd819d2e-4d5b-4551-9009-de0499ec7cef
+begin
+	actual = lm_test.Score
+	residuals = actual .- y_pred
+	
+	# Root Mean Squared Error (RMSE)
+	rmse = sqrt(mean(residuals .^ 2))
+	println(rmse)
+	
+	# Mean Absolute Error (MAE)
+	mae = mean(abs.(residuals))
+	println(mae)
+	
+	# Out-of-sample R-squared (R²)
+	ss_res = sum(residuals .^ 2)
+	ss_tot = sum((actual .- mean(actual)) .^ 2)
+	r2_test = 1 - (ss_res / ss_tot)
+	println(r2_test)
+end
+
+# ╔═╡ 4e752445-177e-486a-b6f1-d0c392b0c8f4
+
+
+# ╔═╡ 4b3f6850-db77-4904-880b-edafae19bc0c
+md"""
+### Using GLM
 """
 
 # ╔═╡ c4f0042e-dac8-4caf-b983-8bc9678b4d1b
+begin
+    # matrix for GLM model
+    # same as for PCA but *not* transformed
+    # also only one life cycle variable included
+     
+    reg_vars = [
+            :RSL,
+            :Recency,
+            :PrevScore,
+            :PrevAssessed,
+            :Qty,
+            :AssetAge,
+            :AssetDesignLife,
+            :LogCRV,
+            :Month,
+            :Year,
+            :Climate
+        ]
 
+    # independent variable matrix
+    X_GLM = (Matrix(select(boilers,reg_vars)))
+
+    # dependent variable vector
+    y_GLM = (boilers.Score)
+
+    # convert everything to float64
+    X_GLM_float64 = convert(Matrix{Float64}, X_GLM)
+    y_GLM_float64 = convert(Vector{Float64}, y_GLM)
+  
+end
+
+# ╔═╡ 130721f3-90bc-4004-8e78-43ec6ac37b93
+typeof(y_GLM)
+
+# ╔═╡ 197ffaaf-9b37-41e1-b921-cf8106e17e62
+glm_model = glm(X_GLM_float64, y_GLM_float64, Gamma(), InverseLink())
+
+# ╔═╡ de655adb-4eaa-45d8-bbd5-dfc99caf7938
+begin
+	# lasso regression
+	λ = 0.7
+	lasso = LassoRegression(λ)
+	theta = fit(lasso, X_GLM_float64, y_GLM_float64)
+	
+end
 
 # ╔═╡ c2324815-aa18-43a0-b9f3-cd7dbcde5647
 md"""
@@ -899,19 +818,6 @@ md"""
 # ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
 # ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
 # ╠═af1af019-a784-4144-a632-e66fca8b1c3b
-# ╟─7606e704-083e-4a5f-8da5-bcdf3bfa3216
-# ╠═12b33241-044c-4631-a9b9-e9c44e24847a
-# ╟─0263eb8b-4e72-4ebc-988b-e524302c2d6a
-# ╟─5d26ccac-1d20-44f7-8696-440e91eeabf1
-# ╠═e7fae12f-3e0b-4e9f-a874-4cb0db599494
-# ╟─bb5b17b7-ad96-4e96-b67c-dc06c1875caf
-# ╠═345182d1-e582-4498-ad3a-daed465891ec
-# ╠═9c2bd780-dca9-4778-8ae3-58003769aefb
-# ╟─d5bb4e75-8bd5-46eb-8f22-1e1bf292deba
-# ╠═d9299f4a-f0f2-4bc4-aec6-35f6a9ac652a
-# ╠═4757dd14-b688-49cc-8e73-3878eceff35e
-# ╟─d0b92a37-92ed-4ce4-85cb-beba9eaab65a
-# ╠═8eeb40e8-93cd-410b-b6d7-30fa362dca6e
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
 # ╟─acde71bb-e5e0-4ff2-b655-ffcb1d9c74fd
@@ -934,8 +840,21 @@ md"""
 # ╠═f94307e2-63bb-4268-97d1-f13f48154150
 # ╠═4b87187a-8931-4322-8dbb-5a4a362b5711
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
-# ╟─e553e6b3-7b8e-4029-b823-eb98362c49a4
+# ╠═f7981403-8dbe-40fd-a8f0-b766be8e6c0d
+# ╠═544b0f7b-a9bb-4577-8c01-0e184b3570bc
+# ╠═d92cc684-54ec-451a-bbee-080cbd997247
+# ╠═048bf2a8-49f6-4e8b-929b-eb75b0efee69
+# ╠═e69a7dd1-ed48-4721-972f-91cbf1fc6c66
+# ╠═18dce7af-f6fc-4b09-a4e1-927dba13e18e
+# ╠═86f70a63-cb47-4361-8009-3d393205b8be
+# ╠═fb541f8a-ea9c-4b5e-961b-1a373b51cbd3
+# ╠═fd819d2e-4d5b-4551-9009-de0499ec7cef
+# ╠═4e752445-177e-486a-b6f1-d0c392b0c8f4
+# ╟─4b3f6850-db77-4904-880b-edafae19bc0c
 # ╠═c4f0042e-dac8-4caf-b983-8bc9678b4d1b
+# ╠═130721f3-90bc-4004-8e78-43ec6ac37b93
+# ╠═197ffaaf-9b37-41e1-b921-cf8106e17e62
+# ╠═de655adb-4eaa-45d8-bbd5-dfc99caf7938
 # ╟─c2324815-aa18-43a0-b9f3-cd7dbcde5647
 # ╠═8bc9c3b1-0ffb-451b-bae9-bf3d209355b6
 # ╟─2defcea8-94d2-4182-b313-7b242d185c08
