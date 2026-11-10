@@ -652,10 +652,13 @@ begin
     spearman_matrix = corspearman(boilers_cor)
 end
 
-# ╔═╡ 3f0bb0f0-29ae-4e19-a6c1-dbb881074367
+# ╔═╡ 13da6ec4-3d14-4d57-aafc-647623e0cc37
 begin
-    # create data labels	
-    spearman_labels = [
+	# CREATE HEATMAP
+
+	# create data labels
+	
+	spearman_labels = [
 		"NormalizedAge",
         "EffectiveAge",
         "RSL",
@@ -672,6 +675,22 @@ begin
         "Year",
         "Climate"
 	]
+
+	# create mask to hide redundant values
+	spearman_matrix_masked = copy(spearman_matrix)
+	spearman_matrix_masked[triu!(trues(size(spearman_matrix_masked)), 1)] .= NaN
+	
+	# plot heatmap
+	heatmap(spearman_labels, spearman_labels, spearman_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm,  size = (1600, 1600), dpi = 200, tickfontsize = 24, bottom_margin = 20mm, top_margin = 10mm)
+
+
+    savefig("spearman_heatmap")
+end
+
+# ╔═╡ 3f0bb0f0-29ae-4e19-a6c1-dbb881074367
+begin
+    # create data labels	
+
     
     # matrix dimensions
    num_rows, num_columns = size(boilers_cor)
@@ -778,9 +797,6 @@ begin
     hline!(plt, grid_range, color = :gray, alpha = 0.6, linewidth = 0.5, label = false)
     plot!(plt, framestyle = :box)
 end
-
-# ╔═╡ 860e8c6a-1a82-4caa-b8d7-3411d5a77962
-savefig("spearman_heatmap_with_sig")
 
 # ╔═╡ eede658f-b6d3-47be-a5e3-c1a6873897c9
 
@@ -904,9 +920,9 @@ md"""
 # ╟─b9c194d6-87fe-459e-82f6-e551d4889747
 # ╟─09771c81-3e9c-42ea-be1a-e389f0bcd906
 # ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
+# ╠═13da6ec4-3d14-4d57-aafc-647623e0cc37
 # ╠═3f0bb0f0-29ae-4e19-a6c1-dbb881074367
 # ╠═5eb540bd-b9b8-4a0f-a902-91199da3bee5
-# ╠═860e8c6a-1a82-4caa-b8d7-3411d5a77962
 # ╠═eede658f-b6d3-47be-a5e3-c1a6873897c9
 # ╠═49bec9d7-c299-473b-ac89-bb23d36355ac
 # ╠═a8df4899-9178-4b98-8183-056810119467
