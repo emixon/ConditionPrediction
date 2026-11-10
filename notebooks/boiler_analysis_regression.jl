@@ -695,6 +695,7 @@ begin
         ]
 
     df_reg = select(boilers, reg_vars)
+    df_reg = mapcols(col -> Float64.(col), df_reg)
     df_train, df_test = partitionTrainTest(df_reg, 0.8)
 
     X_train = select(df_train, Not(:Score))
@@ -706,11 +707,11 @@ begin
 end
 
 # ╔═╡ 17cfa049-0fee-49a0-b836-c8891bfd8a3d
-mdl_ols = LinearRegressor()
+ols_model = LinearRegressor()
 
 # ╔═╡ 342297e1-fa1e-47bc-aa66-bbba4323d30c
 begin
-    mach = machine(mdl_ols, X_train, y_train, scitype_check_level=0)
+    mach = machine(ols_model, X_train, y_train)
     fit!(mach)
 
     fp = fitted_params(mach)
@@ -732,60 +733,65 @@ end
 round(rsq(ŷ, y_test), sigdigits=4)
 
 # ╔═╡ 1a1f1d7b-ff90-4509-9f95-85902ac283f5
+# ╠═╡ disabled = true
+#=╠═╡
 begin
 	res = ŷ .- y_test
 	plot(res, line=:stem, linewidth=1, marker=:circle, legend=false, size=((800,600)))
 	hline!([0], linewidth=2, color=:red)    # add a horizontal line at x=0
 end
+  ╠═╡ =#
 
 # ╔═╡ bb91371c-18d9-4891-8fe5-7284d8d889f0
+#=╠═╡
 histogram(res, normalize=true, size=(800,600), label="residual")
+  ╠═╡ =#
 
 # ╔═╡ 4e752445-177e-486a-b6f1-d0c392b0c8f4
 md"""
 ### Ridge Regression
 """
 
-# ╔═╡ a064fc54-7b97-4135-9b61-2fcee64362b6
+# ╔═╡ 6413baf0-2c77-4946-9873-c066e3c007c7
+ridge_model = RidgeRegressor(lambda = 1.0)
 
+# ╔═╡ a064fc54-7b97-4135-9b61-2fcee64362b6
+begin
+	mach_ridge = machine(ridge_model, X_train, y_train)
+	fit!(mach_ridge)
+
+    fp_ridge = fitted_params(mach_ridge)
+    coefs_ridge = fp_ridge.coefs
+    intercept_ridge = fp_ridge.intercept
+    for (name, val) in coefs_ridge
+        println("$(rpad(name, 8)):  $(round(val, sigdigits=3))")
+    end
+    println("Intercept: $(round(intercept_ridge, sigdigits=3))")
+end
+
+# ╔═╡ 34c5e30a-d710-4ebf-9c22-2fcddfd8b37d
+begin
+	ŷ_ridge = MLJ.predict(mach_ridge, X_test)
+	round(rms(ŷ_ridge, y_test), sigdigits=4)
+end
+
+# ╔═╡ e265624e-cb5c-4308-b577-9b4f53de1f96
+round(rsq(ŷ_ridge, y_test), sigdigits=4)
+
+# ╔═╡ 0386552b-e143-4e4b-9f4e-33d351ea7823
+begin
+	res_ridge = ŷ_ridge .- y_test
+	plot(res_ridge, line=:stem, linewidth=1, marker=:circle, legend=false, size=((800,600)))
+	hline!([0], linewidth=2, color=:red)    # add a horizontal line at x=0
+end
+
+# ╔═╡ 4745c960-7a1d-40fc-884e-26dc745e606a
+histogram(res_ridge, normalize=true, size=(800,600), label="residual")
 
 # ╔═╡ 4b3f6850-db77-4904-880b-edafae19bc0c
 md"""
 ### Using GLM
 """
-
-# ╔═╡ c4f0042e-dac8-4caf-b983-8bc9678b4d1b
-begin
-    # matrix for GLM model
-    # same as for PCA but *not* transformed
-    # also only one life cycle variable included
-  
-    # independent variable matrix
-    X_GLM = (Matrix(select(boilers,reg_vars)))
-
-    # dependent variable vector
-    y_GLM = (boilers.Score)
-
-    # convert everything to float64
-    X_GLM_float64 = convert(Matrix{Float64}, X_GLM)
-    y_GLM_float64 = convert(Vector{Float64}, y_GLM)
-  
-end
-
-# ╔═╡ 130721f3-90bc-4004-8e78-43ec6ac37b93
-typeof(y_GLM)
-
-# ╔═╡ 197ffaaf-9b37-41e1-b921-cf8106e17e62
-glm_model = glm(X_GLM_float64, y_GLM_float64, Gamma(), InverseLink())
-
-# ╔═╡ de655adb-4eaa-45d8-bbd5-dfc99caf7938
-begin
-	# lasso regression
-	λ = 0.7
-	lasso = LassoRegression(λ)
-	theta = fit(lasso, X_GLM_float64, y_GLM_float64)
-	
-end
 
 # ╔═╡ c2324815-aa18-43a0-b9f3-cd7dbcde5647
 md"""
@@ -860,12 +866,13 @@ md"""
 # ╠═1a1f1d7b-ff90-4509-9f95-85902ac283f5
 # ╠═bb91371c-18d9-4891-8fe5-7284d8d889f0
 # ╟─4e752445-177e-486a-b6f1-d0c392b0c8f4
+# ╠═6413baf0-2c77-4946-9873-c066e3c007c7
 # ╠═a064fc54-7b97-4135-9b61-2fcee64362b6
+# ╠═34c5e30a-d710-4ebf-9c22-2fcddfd8b37d
+# ╠═e265624e-cb5c-4308-b577-9b4f53de1f96
+# ╠═0386552b-e143-4e4b-9f4e-33d351ea7823
+# ╠═4745c960-7a1d-40fc-884e-26dc745e606a
 # ╠═4b3f6850-db77-4904-880b-edafae19bc0c
-# ╠═c4f0042e-dac8-4caf-b983-8bc9678b4d1b
-# ╠═130721f3-90bc-4004-8e78-43ec6ac37b93
-# ╠═197ffaaf-9b37-41e1-b921-cf8106e17e62
-# ╠═de655adb-4eaa-45d8-bbd5-dfc99caf7938
 # ╟─c2324815-aa18-43a0-b9f3-cd7dbcde5647
 # ╠═8bc9c3b1-0ffb-451b-bae9-bf3d209355b6
 # ╟─2defcea8-94d2-4182-b313-7b242d185c08
