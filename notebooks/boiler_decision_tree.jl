@@ -6,104 +6,133 @@ using InteractiveUtils
 
 # ╔═╡ e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
 begin
-    using CSV, DataFrames, Statistics, StatsPlots, PlutoUI, Markdown
+    using CSV, DataFrames, Statistics, StatsPlots, PlutoUI, Markdown, InteractiveUtils
     using StatsPlots.PlotMeasures: mm
     using CategoricalArrays: categorical
-    import DecisionTree, MLJBase, Random
+    import DecisionTree, MLJBase, SHA
 end
 
 # ╔═╡ 154d00f9-6536-4f1a-ab29-510b54c4e303
 md"""
 # Decision Tree Analysis
 
-This analysis classifies boiler assessments as DoNothing or NeedsAction using condition, lifecycle, seasonal, cost, and climate predictors. A single decision tree estimates the probability of each category through successive decision rules. The workflow covers data preparation, model selection, held-out evaluation, and interpretation.
+The model estimates whether a boiler assessment belongs to `DoNothing`
+(Score ≥ 85) or `NeedsAction` (Score < 85), using lifecycle, modeled-condition,
+history, seasonal, cost, and climate predictors. The analysis compares a fixed
+baseline with alternative feature sets and tree-complexity settings, then
+evaluates the selected configuration on held-out records.
 """
 
 # ╔═╡ 55f052d6-6bfe-414c-87e3-ba99d674a8c0
 md"""
-# Data Preparation
+# Data preparation and predictor construction
 
-Records with MEC equal to 1 are retained. Previous-assessment availability,  normalized asset age, cyclic month variables, and log-transformed replacement cost are constructed from the recorded fields. Rows missing the target or required non-imputed predictors are removed.
+Previous-assessment availability is represented by `PrevAssessed`, which records
+whether `PrevScore` is available before missing values are replaced.
+`NormalizedAssetAge` is calculated as the ratio of `AssetAge` to `AssetDesignLife`.
 
-Missing values in the designated predictors are filled using training-subset means, recalculated within each validation fold. Climate is retained as a numerical code; its ordering and mean imputation are modeling assumptions.
+Assessment month is represented by `MonthSin` and `MonthCos`, preserving its cyclic
+structure. Replacement cost is represented by `LogCRV`, calculated as the natural
+logarithm of one plus CRV. These constructed variables are combined with the recorded
+condition, lifecycle, history, and climate fields to form the candidate predictor sets.
 """
 
 # ╔═╡ b078a14b-049e-4398-9c79-85ef7fde2843
 begin
-    seed = 1234
-    score_threshold = 85.0
-    probability_cutoff = 0.50
+    seed, nfolds = 1234, 5
+    score_threshold, probability_cutoff = 85.0, 0.50
     probability_floor = eps(Float64)
-    depth_grid = [2, 3, 4, 5, 6, 8]
-    leaf_grid = [10, 30, 60]
-    nfolds = 5
-
-    feature_cols = [
-        :RSL, :PredictedCI, :PrevAssessed, :NormalizedAssetAge,
-        :MonthSin, :MonthCos, :LogCRV, :Climate,
-    ]
+    baseline_depth, baseline_leaf = 4, 30
+    depth_grid, leaf_grid = [2, 3, 4, 5, 6, 8], [10, 30, 60]
     classes = ["DoNothing", "NeedsAction"]
     project_dir = normpath(joinpath(@__DIR__, ".."))
     data_path = joinpath(project_dir, "data", "boilers.csv")
 
-    @assert isempty(intersect(feature_cols, [:Score, :PercentGreen, :Id, :source_row]))
-    @assert 0 < probability_cutoff < 1 && 0 < probability_floor < 0.5
+    baseline_cols = [:RSL, :PredictedCI, :PrevAssessed, :NormalizedAssetAge,
+                     :MonthSin, :MonthCos, :LogCRV, :Climate]
+feature_sets = [
+    (name="Baseline8", cols=baseline_cols),
+    (name="NoRSL7", cols=setdiff(baseline_cols, [:RSL])),
+    (name="NoCI7", cols=setdiff(baseline_cols, [:PredictedCI])),
+    (name="NoSeason6", cols=setdiff(baseline_cols, [:MonthSin, :MonthCos])),
+    (name="NoClimate7", cols=setdiff(baseline_cols, [:Climate])),
+    (name="NoPrevAssessed7", cols=setdiff(baseline_cols, [:PrevAssessed])),
+    (name="NoMonthCos7", cols=setdiff(baseline_cols, [:MonthCos])),
+    (name="History10", cols=[baseline_cols; :PrevScore; :Recency]),
+    (name="Lifecycle10", cols=[baseline_cols; :NormalizedAge; :EffectiveAge]),
+    (name="Expanded12", cols=[baseline_cols; :PrevScore; :Recency;
+                             :NormalizedAge; :EffectiveAge]),
+]
+    all_features = unique(vcat([s.cols for s in feature_sets]...))
+    imputed_cols = intersect(all_features, [:PrevScore, :Recency, :Climate])
+    @assert isempty(intersect(all_features, [:Score, :PercentGreen, :Id, :source_row]))
+    @assert baseline_depth in depth_grid && baseline_leaf in leaf_grid
     @assert nfolds >= 2 && all(>(0), depth_grid) && all(>(0), leaf_grid)
-    figure_style = (size=(1200, 950), dpi=200, titlefontsize=28,
-        guidefontsize=26, tickfontsize=20, legendfontsize=17,
-        left_margin=25mm, bottom_margin=20mm, top_margin=12mm, right_margin=16mm)
+    @assert 0 < probability_cutoff < 1 && 0 < probability_floor < 0.5
+    figure_style = (size=(1300, 900), dpi=200, titlefontsize=24,
+        guidefontsize=22, tickfontsize=16, legendfontsize=14,
+        left_margin=22mm, bottom_margin=20mm, top_margin=12mm, right_margin=16mm)
 end
 
 # ╔═╡ ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+md"""
+# Modeling dataset and validation design
+
+All experiments use the same records after removing observations missing the
+response or required non-imputed predictors. A stratified 80/20 training/test
+split uses seed $(seed), and every configuration shares the same $(nfolds)
+training-validation folds. The baseline is recalculated on this common dataset.
+
+Missing `PrevScore`, `Recency`, and `Climate` values use training-only means,
+recalculated within each fold. `Score`, `PercentGreen`, and identifiers are
+excluded from the predictors; component IDs are retained only to check overlap.
+"""
+
+# ╔═╡ 5a3a0107-bed6-440a-9805-5a2b9b483b72
 data_info = let
-    isfile(data_path) || error("Save this notebook in notebooks/; missing: $data_path")
+    isfile(data_path) || error("Save this file in notebooks/; missing CSV: $data_path")
     raw = CSV.read(data_path, DataFrame)
-    base_cols = [:MEC, :Score, :PrevScore, :AssetAge, :AssetDesignLife, :Month, :CRV]
-    absent = setdiff(base_cols, Symbol.(names(raw)))
+    needed = [:MEC, :Score, :PrevScore, :AssetAge, :AssetDesignLife, :Month, :CRV]
+    absent = setdiff(needed, Symbol.(names(raw)))
     isempty(absent) || error("Missing required columns: $absent")
     raw.source_row = collect(1:nrow(raw))
     df = raw[coalesce.(raw.MEC .== 1, false), :]
-    nrow(df) > 0 || error("No boiler observations with MEC == 1.")
-
-    for col in base_cols[2:end]
-        all(x -> x isa Real && isfinite(x), skipmissing(df[!, col])) ||
-            error("$col contains nonnumeric or non-finite values.")
+    nrow(df) > 0 || error("No observations with MEC == 1.")
+    for c in needed[2:end]
+        all(x -> x isa Real && isfinite(x), skipmissing(df[!, c])) ||
+            error("Invalid numeric values in $c.")
     end
     all(>(0), skipmissing(df.AssetDesignLife)) || error("Design life must be positive.")
     all(x -> isinteger(x) && 1 <= x <= 12, skipmissing(df.Month)) || error("Invalid month.")
     all(>=(0), skipmissing(df.CRV)) || error("CRV must be nonnegative.")
-
     df.PrevAssessed = Int.(.!ismissing.(df.PrevScore))
     df.NormalizedAssetAge = df.AssetAge ./ df.AssetDesignLife
     df.MonthSin = sin.(2π .* (df.Month .- 1) ./ 12)
     df.MonthCos = cos.(2π .* (df.Month .- 1) ./ 12)
     df.LogCRV = log1p.(df.CRV)
     :Id in Symbol.(names(df)) || (df.Id = fill(missing, nrow(df)))
-
-    absent = setdiff(feature_cols, Symbol.(names(df)))
-    isempty(absent) || error("Missing predictors: $absent")
-    for col in feature_cols
-        all(x -> x isa Real && isfinite(x), skipmissing(df[!, col])) ||
-            error("Invalid observed values in $col.")
+    absent = setdiff(all_features, Symbol.(names(df)))
+    isempty(absent) || error("Planned experiments need these missing columns: $absent")
+    for c in all_features
+        all(x -> x isa Real && isfinite(x), skipmissing(df[!, c])) ||
+            error("Invalid observed values in $c.")
     end
-    imputed_cols = intersect(feature_cols, [:PrevScore, :Recency, :Climate])
-    required = [:Score; setdiff(feature_cols, imputed_cols)]
-    selected = select(df, [:source_row, :Id, :Score, feature_cols...])
-    kept = dropmissing(selected, required)
-    nrow(kept) > 0 || error("No usable observations remain.")
-    (data=kept, original_rows=nrow(df), removed_rows=nrow(df)-nrow(kept))
-end
+    selected = select(df, [:source_row, :Id, :Score, all_features...])
+    required = [:Score; setdiff(all_features, imputed_cols)]
+    common = dropmissing(selected, required)
+    nrow(common) > 0 || error("No common eligible observations remain.")
+    baseline_required = [:Score; setdiff(baseline_cols, imputed_cols)]
+    baseline_n = count(completecases(selected, baseline_required))
+    audit = DataFrame(BoilerRows=nrow(df), BaselineEligibleRows=baseline_n,
+        CommonRows=nrow(common), RemovedRows=nrow(df)-nrow(common),
+        ExtraRowsRemovedForExperiments=baseline_n-nrow(common))
+    (data=common, audit=audit, sha256=bytes2hex(open(SHA.sha256, data_path)))
+end;
 
-# ╔═╡ cdfc67fe-93bf-46ba-b19c-30c90f54f011
-md"""
-# Classification Target and Data Split
+# ╔═╡ 139075ff-92d9-480a-b53b-4bca487b100f
+data_info.audit
 
-Assessments with Score ≥ $(score_threshold) are labeled DoNothing; lower scores are labeled NeedsAction. A stratified split assigns approximately 80% of the observations to training and 20% to testing, using seed $(seed).
-
-The class summary reports category frequencies. The split summary reports component IDs shared between training and testing. This overlap is documented, not eliminated by the observation-level split.
-"""
-
-# ╔═╡ 5a3a0107-bed6-440a-9805-5a2b9b483b72
+# ╔═╡ 3b280832-9ad9-437c-becd-e79eb3a51e91
 begin
     model_df = data_info.data
     y = categorical(ifelse.(model_df.Score .>= score_threshold, "DoNothing", "NeedsAction"))
@@ -112,355 +141,490 @@ begin
     ytrain, ytest = string.(y[train_rows]), string.(y[test_rows])
     @assert isempty(intersect(train_rows, test_rows))
     @assert sort(vcat(train_rows, test_rows)) == collect(eachindex(y))
-    @assert all(c -> count(==(c), ytrain) >= nfolds, classes) "Too few training cases per class."
-    @assert all(c -> c in ytest, classes) "Both classes must occur in the test set."
-
-    class_summary = DataFrame(Class=classes,
-        Count=[count(==(c), y) for c in classes],
+    @assert all(c -> count(==(c), ytrain) >= nfolds, classes)
+    @assert all(c -> c in ytest, classes)
+    class_summary = DataFrame(Class=classes, Count=[count(==(c), y) for c in classes],
         Percentage=[100 * mean(y .== c) for c in classes])
     class_summary
 end
 
-# ╔═╡ 139075ff-92d9-480a-b53b-4bca487b100f
-begin
-    function prepare_features(training, newdata, cols)
-        a, b = select(training, cols), select(newdata, cols)
-        means = Dict{Symbol, Float64}()
-        for col in intersect(cols, [:PrevScore, :Recency, :Climate])
-            observed = collect(skipmissing(a[!, col]))
-            isempty(observed) && error("All training values missing for $col.")
-            means[col] = mean(observed)
-            a[!, col] = coalesce.(a[!, col], means[col])
-            b[!, col] = coalesce.(b[!, col], means[col])
-        end
-        Xtrain, Xnew = Matrix{Float32}(a), Matrix{Float32}(b)
-        @assert all(isfinite, Xtrain) && all(isfinite, Xnew)
-        (Xtrain=Xtrain, Xnew=Xnew, means=means)
-    end
-
-    function component_overlap(training, other)
-        a, b = Set(skipmissing(training.Id)), Set(skipmissing(other.Id))
-        (SharedIDs=length(intersect(a, b)),
-         SeenRows=count(id -> !ismissing(id) && id in a, other.Id),
-         MissingTrainingIDs=count(ismissing, training.Id),
-         MissingOtherIDs=count(ismissing, other.Id))
-    end
-end
-
-# ╔═╡ 3b280832-9ad9-437c-becd-e79eb3a51e91
-begin
-    prepared = prepare_features(model_df[train_rows, :], model_df[test_rows, :], feature_cols)
-    split_summary = DataFrame([merge(
-        (TrainingRows=length(train_rows), TestRows=length(test_rows),
-         RemovedRows=data_info.removed_rows),
-        component_overlap(model_df[train_rows, :], model_df[test_rows, :]))])
-    split_summary
-end
-
 # ╔═╡ d7f18f6d-7669-402c-8814-aa0d5a7c39d2
-md"""
-# Decision Tree Model
-
-The tree selects splits that reduce the sample-size-weighted Gini impurity of the resulting groups. Lower impurity indicates greater separation of the condition categories. Each terminal leaf estimates P(NeedsAction) from its training-class proportion.
-
-Maximum depth and minimum leaf size limit tree complexity. Gini impurity selects individual splits, while validation log loss selects the model settings.
-"""
-
-# ╔═╡ eb08c937-ac10-4ce0-9474-c1b65900c48c
 begin
-    accuracy(predicted, actual) = mean(predicted .== actual)
-
-    function gini_impurity(labels)
-        isempty(labels) && return 0.0
-        1 - sum(mean(labels .== c)^2 for c in unique(labels))
+    function prepare_features(training, other, cols)
+        a, b = select(training, cols), select(other, cols)
+        means = Dict{Symbol, Float64}()
+        for c in intersect(cols, imputed_cols)
+            v = collect(skipmissing(a[!, c]))
+            isempty(v) && error("All training values are missing for $c.")
+            means[c] = mean(v)
+            a[!, c] = coalesce.(a[!, c], means[c])
+            b[!, c] = coalesce.(b[!, c], means[c])
+        end
+        Xa, Xb = Matrix{Float32}(a), Matrix{Float32}(b)
+        @assert all(isfinite, Xa) && all(isfinite, Xb)
+        (Xtrain=Xa, Xnew=Xb, means=means)
     end
 
-    function weighted_gini_impurity(x, cut, labels)
-        @assert length(x) == length(labels) && !isempty(labels)
-        left = x .<= cut
-        weight = mean(left)
-        weight * gini_impurity(labels[left]) +
-            (1 - weight) * gini_impurity(labels[.!left])
+    function component_overlap(a, b)
+        ids = Set(skipmissing(a.Id))
+        (SharedIDs=length(intersect(ids, Set(skipmissing(b.Id)))),
+         SeenRows=count(id -> !ismissing(id) && id in ids, b.Id),
+         MissingTrainingIDs=count(ismissing, a.Id), MissingOtherIDs=count(ismissing, b.Id))
     end
 
-    gini_counts(counts, total) = total == 0 ? 0.0 :
-        1 - sum((n / total)^2 for n in counts)
+    gini_impurity(y) = isempty(y) ? 0.0 : 1 - sum(mean(y .== c)^2 for c in unique(y))
+    gini_counts(counts, n) = n == 0 ? 0.0 : 1 - sum((v/n)^2 for v in counts)
 
-    @assert isapprox(gini_impurity([:a, :a, :b, :c]), 0.625)
-    @assert isapprox(gini_counts([2, 1, 1], 4), 0.625)
-end
-
-# ╔═╡ a1b1717b-c6eb-4b72-a0de-35972e8ea718
-begin
-    function fit_tree(X, labels; depth=4, leaf=30)
-        @assert size(X, 1) == length(labels) && 1 <= leaf <= length(labels)
-        DecisionTree.build_tree(labels, X, 0, depth, leaf, 2 * leaf, 0.0;
+    function fit_tree(X, labels; depth=baseline_depth, leaf=baseline_leaf)
+        @assert size(X, 1) == length(labels) && depth >= 1 && 1 <= leaf <= length(labels)
+        DecisionTree.build_tree(labels, X, 0, depth, leaf, 2*leaf, 0.0;
             loss=gini_counts, rng=seed, impurity_importance=true)
     end
 
     function predict_probability(tree, X)
-        probabilities = DecisionTree.apply_tree_proba(tree, X, classes)
-        @assert size(probabilities) == (size(X, 1), 2)
-        @assert all(v -> isfinite(v) && 0 <= v <= 1, probabilities)
-        @assert all(v -> isapprox(v, 1.0; atol=1e-12), sum(probabilities; dims=2))
-        probabilities[:, 2]   # Explicit class order: P(NeedsAction)
+        p = DecisionTree.apply_tree_proba(tree, X, classes)
+        @assert size(p) == (size(X, 1), 2)
+        @assert all(v -> isfinite(v) && 0 <= v <= 1, p)
+        @assert all(v -> isapprox(v, 1.0; atol=1e-12), sum(p; dims=2))
+        p[:, 2]
     end
 
     function classification_metrics(p, actual; cutoff=probability_cutoff)
-        @assert length(p) == length(actual) && !isempty(p) && 0 <= cutoff <= 1
+        @assert length(p) == length(actual) && !isempty(p)
         @assert all(v -> isfinite(v) && 0 <= v <= 1, p)
-        @assert all(c -> c in classes, actual)
-        positive, predicted = actual .== "NeedsAction", p .>= cutoff
-        tp, fp = sum(predicted .& positive), sum(predicted .& .!positive)
-        fn, tn = sum(.!predicted .& positive), sum(.!predicted .& .!positive)
-        safe_divide(a, b) = b == 0 ? NaN : a / b
-        p_actual = ifelse.(positive, p, 1 .- p)
+        @assert all(c -> c in classes, actual) && 0 <= cutoff <= 1
+        actual_positive, predicted = actual .== "NeedsAction", p .>= cutoff
+        tp, fp = sum(predicted .& actual_positive), sum(predicted .& .!actual_positive)
+        fn, tn = sum(.!predicted .& actual_positive), sum(.!predicted .& .!actual_positive)
+        divide(a, b) = b == 0 ? NaN : a/b
+        p_actual = ifelse.(actual_positive, p, 1 .- p)
         (LogLoss=-mean(log.(clamp.(p_actual, probability_floor, 1-probability_floor))),
-         Accuracy=accuracy(predicted, positive), Precision=safe_divide(tp, tp+fp),
-         Recall=safe_divide(tp, tp+fn), F1=safe_divide(2*tp, 2*tp+fp+fn),
+         Accuracy=mean(predicted .== actual_positive), Precision=divide(tp, tp+fp),
+         Recall=divide(tp, tp+fn), F1=divide(2*tp, 2*tp+fp+fn),
          RawLogLoss=-mean(log.(p_actual)), ZeroProbabilityErrors=count(iszero, p_actual),
          TP=tp, FP=fp, FN=fn, TN=tn)
+    end
+
+    function rounded_table(df)
+        out = copy(df)
+        for c in names(out)
+            if eltype(out[!, c]) <: AbstractFloat
+                out[!, c] = round.(out[!, c]; digits=endswith(c, "_pct") ? 2 : 6)
+            end
+        end
+        out
+    end
+
+    function percent_metrics(m)
+        (Accuracy_pct=100*m.Accuracy, Precision_pct=100*m.Precision,
+         Recall_pct=100*m.Recall, F1_pct=100*m.F1, LogLoss=m.LogLoss)
     end
 end
 
 # ╔═╡ 7d26ba63-1434-40a6-96c7-9d5f4c00135f
-md"""
-# One-Rule RSL Illustration
-
-Candidate RSL thresholds are evaluated using training data. The lowest weighted Gini impurity among these candidates identifies the illustrated cut. This single-rule example explains split selection; it does not determine the full tree's first split or provide a held-out performance estimate.
-"""
+self_checks = let
+    @assert isapprox(gini_impurity([:a, :a, :b, :c]), 0.625)
+    @assert isapprox(gini_counts([2, 1, 1], 4), 0.625)
+    @assert isapprox(classification_metrics([0.5, 0.5], classes).LogLoss, log(2))
+    Xtoy = reshape(Float32[1, 2, 3, 4], :, 1)
+    ytoy = ["DoNothing", "DoNothing", "NeedsAction", "NeedsAction"]
+    t = fit_tree(Xtoy, ytoy; depth=1, leaf=1)
+    @assert predict_probability(t, Xtoy) == [0.0, 0.0, 1.0, 1.0]
+    "Local Gini, metric, and tree-interface checks passed."
+end
 
 # ╔═╡ 661416fe-494a-4057-ab7b-8b1bf6173a9e
-one_rule = let
-    x = Float64.(prepared.Xtrain[:, findfirst(==(:RSL), feature_cols)])
-    cuts = unique(quantile(x, collect(range(0.01, 0.99; length=60))))
-    cuts = filter(c -> minimum(x) <= c < maximum(x), cuts)
-    if isempty(cuts)
-        nothing
-    else
-        impurity = [weighted_gini_impurity(x, c, ytrain) for c in cuts]
-        cut = cuts[argmin(impurity)]
-        left = x .<= cut
-        majority(labels) = mean(labels .== "NeedsAction") >= 0.5 ? "NeedsAction" : "DoNothing"
-        a, b = majority(ytrain[left]), majority(ytrain[.!left])
-        (cuts=cuts, impurity=impurity, cut=cut, left_class=a, right_class=b,
-         training_accuracy=accuracy(ifelse.(left, a, b), ytrain))
-    end
-end
-
-# ╔═╡ d1ce4302-d470-42d2-923f-a27aa37a411e
-gini_plot = let
-    p = plot(; xlabel="RSL decision threshold", ylabel="Weighted Gini impurity",
-        title="One-rule RSL example — training data", figure_style...)
-    if !isnothing(one_rule)
-        plot!(p, one_rule.cuts, one_rule.impurity; label="Candidate cuts", linewidth=3)
-        vline!(p, [one_rule.cut]; label="Selected cut", linestyle=:dash)
-    end
-    p
-end
-
-# ╔═╡ 774e81d0-6dd3-4ee7-b882-51abc06b2bc5
-md"""
-# Model Validation and Selection
-
-Maximum depth and minimum leaf size are evaluated using $(nfolds)-fold stratified cross-validation within the training subset. All candidates use the same folds, with missing-value means fitted separately on each fold's training observations.
-
-The configuration with the lowest mean fold log loss is selected. The test subset is not used for model selection. CV_SD describes variation across folds, not a confidence interval.
-"""
-
-# ╔═╡ a90c078d-09a9-42b3-af5d-87aaa4e3de23
-tuning = let
+cv_design = let
+    self_checks
     training = model_df[train_rows, :]
     pairs = MLJBase.train_test_pairs(
         MLJBase.StratifiedCV(nfolds=nfolds, shuffle=true, rng=seed),
         collect(eachindex(ytrain)), categorical(ytrain))
-    coverage, fold_id = zeros(Int, length(ytrain)), zeros(Int, length(ytrain))
-    fold_info, folds = NamedTuple[], NamedTuple[]
-
+    folds, audit = NamedTuple[], NamedTuple[]
+    coverage, membership = zeros(Int, length(ytrain)), zeros(Int, length(ytrain))
     for (i, (a, b)) in enumerate(pairs)
         @assert isempty(intersect(a, b))
         @assert sort(vcat(a, b)) == collect(eachindex(ytrain))
         @assert all(c -> c in ytrain[a] && c in ytrain[b], classes)
-        @assert maximum(leaf_grid) <= length(a) "Reduce leaf_grid for this small dataset."
+        @assert maximum(leaf_grid) <= length(a) "Reduce leaf_grid for a small dataset."
         coverage[b] .+= 1
-        fold_id[b] .= i
-        inputs = prepare_features(training[a, :], training[b, :], feature_cols)
-        push!(folds, (Xtrain=inputs.Xtrain, Xvalid=inputs.Xnew,
-                      ytrain=ytrain[a], yvalid=ytrain[b], valid=b))
-        push!(fold_info, merge((Fold=i, TrainingRows=length(a), ValidationRows=length(b)),
+        membership[b] .= i
+        z = prepare_features(training[a, :], training[b, :], all_features)
+        push!(folds, (Xtrain=z.Xtrain, Xvalid=z.Xnew, ytrain=ytrain[a],
+                      yvalid=ytrain[b], valid_rows=b))
+        push!(audit, merge((Fold=i, TrainingRows=length(a), ValidationRows=length(b)),
             component_overlap(training[a, :], training[b, :])))
     end
     @assert all(==(1), coverage)
+    (folds=folds, audit=DataFrame(audit), membership=membership)
+end;
 
-    rows, best_loss = NamedTuple[], Inf
-    best, best_oof = (depth=0, leaf=0), Float64[]
-    for depth in sort(depth_grid), leaf in sort(leaf_grid; rev=true)
-        losses, oof = Float64[], fill(NaN, length(ytrain))
-        for f in folds
-            tree = fit_tree(f.Xtrain, f.ytrain; depth=depth, leaf=leaf)
-            p = predict_probability(tree, f.Xvalid)
-            push!(losses, classification_metrics(p, f.yvalid).LogLoss)
-            oof[f.valid] = p
-        end
-        @assert all(isfinite, oof)
-        loss = mean(losses)
-        push!(rows, (Depth=depth, MinLeaf=leaf, CV_LogLoss=loss, CV_SD=std(losses),
-            OOF_LogLoss=classification_metrics(oof, ytrain).LogLoss))
-        if loss < best_loss  # Exact ties keep the shallower tree/larger leaves.
-            best_loss, best, best_oof = loss, (depth=depth, leaf=leaf), copy(oof)
-        end
-    end
-    (table=sort(DataFrame(rows), :CV_LogLoss), best=best, cv_loss=best_loss,
-     oof=best_oof, folds=DataFrame(fold_info), fold_id=fold_id)
+# ╔═╡ d1ce4302-d470-42d2-923f-a27aa37a411e
+begin
+    split_summary = DataFrame([merge(
+        (TrainingRows=length(train_rows), TestRows=length(test_rows)),
+        component_overlap(model_df[train_rows, :], model_df[test_rows, :]))])
+    (Holdout=split_summary, ValidationFolds=cv_design.audit)
 end
 
+# ╔═╡ 774e81d0-6dd3-4ee7-b882-51abc06b2bc5
+begin
+    function evaluate_configuration(spec; depth=baseline_depth, leaf=baseline_leaf)
+        indices = [findfirst(==(c), all_features)::Int for c in spec.cols]
+        losses, train_losses, train_accuracy = Float64[], Float64[], Float64[]
+        oof = fill(NaN, length(ytrain))
+        for f in cv_design.folds
+            Xa, Xb = f.Xtrain[:, indices], f.Xvalid[:, indices]
+            t = fit_tree(Xa, f.ytrain; depth=depth, leaf=leaf)
+            p = predict_probability(t, Xb)
+            a = classification_metrics(predict_probability(t, Xa), f.ytrain)
+            push!(losses, classification_metrics(p, f.yvalid).LogLoss)
+            push!(train_losses, a.LogLoss)
+            push!(train_accuracy, a.Accuracy)
+            oof[f.valid_rows] = p
+        end
+        @assert all(isfinite, oof)
+        m = classification_metrics(oof, ytrain)
+        summary = (FeatureSet=spec.name, NFeatures=length(spec.cols), Depth=depth,
+            MinLeaf=leaf, CV_LogLoss=mean(losses), CV_SD=std(losses),
+            MeanTrainLogLoss=mean(train_losses), MeanTrainAccuracy_pct=100*mean(train_accuracy),
+            OOF_LogLoss=m.LogLoss, OOF_Accuracy_pct=100*m.Accuracy,
+            OOF_Precision_pct=100*m.Precision, OOF_Recall_pct=100*m.Recall,
+            OOF_F1_pct=100*m.F1, ZeroProbabilityErrors=m.ZeroProbabilityErrors)
+        (spec=spec, summary=summary, oof=oof, fold_losses=losses)
+    end
+
+    config_key(r) = (r.summary.FeatureSet, r.summary.Depth, r.summary.MinLeaf)
+    selection_key(r) = (r.summary.CV_LogLoss, r.summary.NFeatures,
+                       r.summary.Depth, -r.summary.MinLeaf, r.summary.FeatureSet)
+    best_run(runs) = first(sort(collect(runs); by=selection_key))
+
+    function experiment_table(runs, reference)
+        DataFrame([merge(r.summary,
+            (CV_Gain_vsBaseline=reference.summary.CV_LogLoss-r.summary.CV_LogLoss,))
+            for r in sort(collect(runs); by=selection_key)])
+    end
+end
+
+# ╔═╡ a90c078d-09a9-42b3-af5d-87aaa4e3de23
+md"""
+# Baseline decision-tree model
+
+The baseline uses eight predictors: RSL, PredictedCI, PrevAssessed,
+NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate. Maximum depth is fixed
+at $(baseline_depth), and each terminal leaf must contain at least $(baseline_leaf)
+training observations.
+
+The tree selects successive splits using Gini impurity and estimates the
+NeedsAction probability from the observed class proportion within each terminal
+leaf.
+
+Because the response is a condition category rather than a numerical score,
+validation performance is assessed using log loss. Lower loss indicates that the
+model assigns greater probability to the observed categories. This fixed tree
+provides the reference for evaluating changes in predictors and model complexity.
+"""
+
 # ╔═╡ b605ff55-7ade-4e03-9652-126d0b2d376b
-tuning.table
+begin
+    baseline_cv = evaluate_configuration(feature_sets[1])
+    rounded_table(DataFrame([baseline_cv.summary]))
+end
 
 # ╔═╡ a7dba1b2-5d9f-47e7-bffc-e23412ab9673
 md"""
-# Held-Out Evaluation
+# Feature selection and hyperparameter optimization
 
-The selected tree is refitted to all training observations and evaluated on the test subset. NeedsAction is predicted when its probability is at least $(probability_cutoff). Accuracy, precision, recall, F1, and log loss summarize performance; a constant training-prevalence predictor provides a reference.
+Feature experiments remove RSL, PredictedCI, Climate, or PrevAssessed individually,
+remove MonthCos alone or both month variables, or add detailed history and
+lifecycle information: PrevScore and Recency, NormalizedAge and EffectiveAge,
+or all four together.
 
-Out-of-fold training results participated in model selection. Numerical clipping makes the reported log loss finite; unclipped loss and zero-probability errors remain available in performance. Precision is undefined when no observations are predicted as NeedsAction.
+The search evaluates $(length(feature_sets)) feature sets across depth limits
+$(join(depth_grid, ", ")) and minimum leaf sizes $(join(leaf_grid, ", ")):
+$(length(feature_sets) * length(depth_grid) * length(leaf_grid)) configurations.
+Feature-only comparisons retain baseline complexity; hyperparameter-only
+comparisons retain the baseline predictors. The joint search selects the lowest
+mean validation log loss without using test scores. Exact ties favor fewer
+predictors, shallower trees, then larger leaves.
 """
 
 # ╔═╡ fc29dbcf-0459-4294-aaa2-8e6655938027
-begin
-    tree = fit_tree(prepared.Xtrain, ytrain; depth=tuning.best.depth, leaf=tuning.best.leaf)
-    p_train = predict_probability(tree, prepared.Xtrain)
-    p_test = predict_probability(tree, prepared.Xnew)
-    test_metrics = classification_metrics(p_test, ytest)
-    baseline_metrics = classification_metrics(fill(mean(ytrain .== "NeedsAction"), length(ytest)), ytest)
-    results = DataFrame(source_row=model_df.source_row[test_rows],
-        actual_score=model_df.Score[test_rows], actual_class=ytest,
-        p_do_nothing=1 .- p_test, p_needs_action=p_test,
-        predicted_class=ifelse.(p_test .>= probability_cutoff, "NeedsAction", "DoNothing"))
-    model_summary = (Algorithm="Single Gini decision tree", NativeType=string(typeof(tree)),
-        SelectedDepth=tuning.best.depth, ActualDepth=DecisionTree.depth(tree),
-        MinimumLeaf=tuning.best.leaf, Leaves=length(tree))
-    @assert test_metrics.TP + test_metrics.FP + test_metrics.FN + test_metrics.TN == length(ytest)
-    first(results, min(10, nrow(results)))
-end
+joint_search = let
+    runs = [baseline_cv]
+    for s in feature_sets, d in depth_grid, l in leaf_grid
+        (s.name, d, l) == config_key(baseline_cv) && continue
+        @info "Cross-validation" feature_set=s.name depth=d min_leaf=l
+        push!(runs, evaluate_configuration(s; depth=d, leaf=l))
+    end
+    @assert length(runs) == length(feature_sets)*length(depth_grid)*length(leaf_grid)
+    @assert length(unique(config_key.(runs))) == length(runs)
+    (runs=runs, table=experiment_table(runs, baseline_cv), best=best_run(runs))
+end;
 
 # ╔═╡ ad5ad4d4-cf9c-4883-9ade-2d517c8080f1
 begin
-    predictions_percent = DataFrame(
-        SourceRow = results.source_row,
-        ActualClass = results.actual_class,
-        DoNothing_pct = round.(100 .* results.p_do_nothing; digits=2),
-        NeedsAction_pct = round.(100 .* results.p_needs_action; digits=2),
-        PredictedClass = results.predicted_class,
-    )
-
-    first(predictions_percent, min(10, nrow(predictions_percent)))
-end
+    feature_runs = filter(r -> r.summary.Depth == baseline_depth &&
+                              r.summary.MinLeaf == baseline_leaf, joint_search.runs)
+    hyper_runs = filter(r -> r.spec.name == "Baseline8", joint_search.runs)
+    feature_results = experiment_table(feature_runs, baseline_cv)
+    hyper_results = experiment_table(hyper_runs, baseline_cv)
+    feature_winner, hyper_winner = best_run(feature_runs), best_run(hyper_runs)
+end;
 
 # ╔═╡ cb9ed9bf-b7be-40e4-806f-9ebdea329373
-begin
-    performance = DataFrame([
-        merge(
-            (Model="Decision tree — training",),
-            classification_metrics(p_train, ytrain),
-        ),
-        merge(
-            (Model="Decision tree — OOF training",),
-            classification_metrics(tuning.oof, ytrain),
-        ),
-        merge(
-            (Model="Decision tree — held-out test",),
-            test_metrics,
-        ),
-    ])
-
-    performance_percent = DataFrame(
-        Model = performance.Model,
-        Accuracy_pct = round.(100 .* performance.Accuracy; digits=2),
-        Precision_pct = round.(100 .* performance.Precision; digits=2),
-        Recall_pct = round.(100 .* performance.Recall; digits=2),
-        F1_pct = round.(100 .* performance.F1; digits=2),
-        LogLoss = round.(performance.LogLoss; digits=6),
-    )
-
-    performance_percent
+hyperparameter_figure = let
+    p = plot(; xlabel="Maximum depth", ylabel="Mean validation log loss",
+        title="Tree complexity", figure_style...)
+    for l in leaf_grid
+        t = sort(hyper_results[hyper_results.MinLeaf .== l, :], :Depth)
+        plot!(p, t.Depth, t.CV_LogLoss; marker=:circle, linewidth=3,
+              label="Minimum leaf = $l")
+    end
+    p
 end
 
 # ╔═╡ eaab2057-3995-4816-9c8d-814c9eccddc3
-md"""
-# Confusion Matrix
-
-Rows represent predicted categories and columns represent observed categories. False negatives are NeedsAction observations predicted as DoNothing; false positives are DoNothing observations predicted as NeedsAction. The matrix separates these errors, which overall accuracy combines.
-"""
+best_by_feature = let
+    rows = NamedTuple[]
+    for s in feature_sets
+        fixed = only(filter(r -> r.spec.name == s.name, feature_runs))
+        tuned = best_run(filter(r -> r.spec.name == s.name, joint_search.runs))
+        fixed_loss, tuned_loss = fixed.summary.CV_LogLoss, tuned.summary.CV_LogLoss
+        push!(rows, (FeatureSet=s.name, NFeatures=length(s.cols),
+            FixedSettingsCV=fixed_loss, TunedCV=tuned_loss,
+            FeatureGain_vsBaseline=baseline_cv.summary.CV_LogLoss-fixed_loss,
+            TuningGain=fixed_loss-tuned_loss,
+            TotalGain_vsBaseline=baseline_cv.summary.CV_LogLoss-tuned_loss,
+            BestDepth=tuned.summary.Depth, BestMinLeaf=tuned.summary.MinLeaf))
+    end
+    DataFrame(rows)
+end;
 
 # ╔═╡ f25e2670-990d-466c-84ad-e3a0bc79b5eb
+rounded_table(best_by_feature)
+
+# ╔═╡ 84177c62-be6f-40c4-a468-2766430d45e5
+md"""
+# Effects of modeling choices and selected configuration
+
+`FeatureGain_vsBaseline` measures the reduction in validation log loss from
+changing predictors at fixed settings. `TuningGain` measures the additional
+reduction from tuning each feature set, and `TotalGain_vsBaseline` combines both.
+Positive gains are loss reductions, not accuracy percentage points.
+
+The progression table compares the baseline, feature-only, tuning-only, and joint
+selections. The winner minimizes validation log loss among tested combinations,
+not necessarily classification error. `CV_SD` describes fold variation, not a
+confidence interval; out-of-fold predictions exclude each observation from its
+fold's training data but still participate in model selection.
+"""
+
+# ╔═╡ 709b46d9-ed61-46db-b61e-0bfed96e821b
+begin
+    selected_cv = joint_search.best
+    best_configuration = DataFrame([merge(selected_cv.summary,
+        (Predictors=join(string.(selected_cv.spec.cols), ", "),))])
+    stages = [("Fixed baseline", baseline_cv), ("Features only", feature_winner),
+              ("Tuning only", hyper_winner), ("Joint selection", selected_cv)]
+    stage_comparison = DataFrame([merge((Stage=label,), r.summary,
+        (CV_Gain_vsBaseline=baseline_cv.summary.CV_LogLoss-r.summary.CV_LogLoss,))
+        for (label, r) in stages])
+    rounded_table(select(stage_comparison, :Stage, :FeatureSet, :NFeatures,
+        :Depth, :MinLeaf, :CV_LogLoss, :CV_Gain_vsBaseline, :OOF_Recall_pct))
+end
+
+# ╔═╡ c54a49d8-9cc8-4af0-9af0-956a87bfb40a
+rounded_table(best_configuration)
+
+# ╔═╡ 77ec91d2-fc0d-4b54-a26a-dfa71b787af1
+md"""
+# Performance evaluation
+
+The fixed baseline and selected tree are refitted on all training records and
+evaluated on the same test records. NeedsAction is predicted at probabilities
+of at least $(round(100 * probability_cutoff; digits=1))%. Accuracy, precision,
+recall, and F1 are percentages; log loss remains on its original scale.
+
+Reported log loss uses numerical clipping; raw loss and zero-probability errors
+remain in `performance`. Precision is undefined when no records are predicted
+as NeedsAction. The cutoff is a preliminary setting, not an established
+operational threshold.
+"""
+
+# ╔═╡ 2a5ad38b-c3fc-47fd-bce0-98dd17621197
+function refit_and_test(run)
+    z = prepare_features(model_df[train_rows, :], model_df[test_rows, :], run.spec.cols)
+    t = fit_tree(z.Xtrain, ytrain; depth=run.summary.Depth, leaf=run.summary.MinLeaf)
+    ptrain, ptest = predict_probability(t, z.Xtrain), predict_probability(t, z.Xnew)
+    (tree=t, ptrain=ptrain, ptest=ptest, means=z.means,
+     training=classification_metrics(ptrain, ytrain),
+     validation=classification_metrics(run.oof, ytrain),
+     test=classification_metrics(ptest, ytest))
+end
+
+# ╔═╡ 2354a3bc-601f-4b62-b0af-2f3686e14199
+begin
+    baseline_fit = refit_and_test(baseline_cv)
+    final_fit = config_key(selected_cv) == config_key(baseline_cv) ? baseline_fit :
+                refit_and_test(selected_cv)
+    tree, test_metrics = final_fit.tree, final_fit.test
+    model_summary = (FeatureSet=selected_cv.spec.name, Predictors=selected_cv.spec.cols,
+        SelectedDepth=selected_cv.summary.Depth, ActualDepth=DecisionTree.depth(tree),
+        MinLeaf=selected_cv.summary.MinLeaf, Leaves=length(tree))
+    performance = DataFrame([
+        merge((Model="Fixed baseline — held-out test",), baseline_fit.test),
+        merge((Model="Selected tree — training",), final_fit.training),
+        merge((Model="Selected tree — OOF validation",), final_fit.validation),
+        merge((Model="Selected tree — held-out test",), final_fit.test),
+    ])
+    performance_percent = DataFrame([merge((Model=r.Model,), percent_metrics(r))
+                                    for r in eachrow(performance)])
+    baseline_vs_selected = performance_percent[[1, 4], :]
+    rounded_table(performance_percent)
+end
+
+# ╔═╡ 71a76853-f155-4765-85c6-ec757801c95f
+results = let
+    @assert test_metrics.TP + test_metrics.FP + test_metrics.FN + test_metrics.TN == length(ytest)
+    DataFrame(SourceRow=model_df.source_row[test_rows], ActualScore=model_df.Score[test_rows],
+        ActualClass=ytest, PNeedsAction=final_fit.ptest, NeedsAction_pct=100 .* final_fit.ptest,
+        PredictedClass=ifelse.(final_fit.ptest .>= probability_cutoff, "NeedsAction", "DoNothing"))
+end;
+
+# ╔═╡ 970edf67-3f2c-4329-853c-a4066d8c9635
+md"""
+# Classification errors and model interpretation
+
+The confusion matrix shows counts with predicted classes on rows and observed
+classes on columns. False negatives are missed NeedsAction assessments; false
+positives are DoNothing assessments incorrectly flagged as NeedsAction.
+
+Normalized Gini importance measures each selected predictor's contribution to
+training impurity reduction, not causal influence. The rule table reports each
+leaf's decision path, training count, probability, and classification using the
+same cutoff as test evaluation.
+"""
+
+# ╔═╡ 6b7a25a1-27e7-489d-a919-28c4a2d9b539
 confusion_figure = let
     m = test_metrics
     counts = [m.TN m.FN; m.FP m.TP]
     p = heatmap(1:2, 1:2, counts; xticks=(1:2, classes), yticks=(1:2, classes),
         yflip=true, xlabel="Actual class", ylabel="Predicted class", color=:Blues,
-        colorbar_title="Count", title="Decision-tree confusion matrix", figure_style...)
+        colorbar_title="Count", title="Selected tree — test confusion matrix", figure_style...)
     for row in 1:2, col in 1:2
         ink = counts[row, col] > maximum(counts)/2 ? :white : :black
-        annotate!(p, col, row, text(string(counts[row, col]), 24, ink))
+        annotate!(p, col, row, text(string(counts[row, col]), 22, ink))
     end
     p
 end
 
-# ╔═╡ 84177c62-be6f-40c4-a468-2766430d45e5
-md"""
-# Model Interpretation
-
-Normalized Gini importance summarizes each predictor's contribution to training impurity reduction. It describes the fitted tree, not causal influence. The leaf table lists complete decision paths, training counts, and estimated NeedsAction probabilities. Predicted categories use the same probability cutoff as the test evaluation.
-"""
-
-# ╔═╡ 709b46d9-ed61-46db-b61e-0bfed96e821b
+# ╔═╡ 7e9f8f44-560c-4655-aa48-12086f23667d
 begin
-    function leaf_rules(tree, cols; cutoff=probability_cutoff)
+    function leaf_rules(t, cols)
         rows = NamedTuple[]
         function visit(node, path)
             if node isa DecisionTree.Leaf
                 p = mean(node.values .== "NeedsAction")
                 push!(rows, (Rule=isempty(path) ? "All observations" : join(path, " AND "),
-                    TrainingN=length(node.values), PNeedsAction=p,
-                    PredictedClass=p >= cutoff ? "NeedsAction" : "DoNothing"))
+                    TrainingN=length(node.values), NeedsAction_pct=100*p,
+                    PredictedClass=p >= probability_cutoff ? "NeedsAction" : "DoNothing"))
             else
-                feature, cut = string(cols[node.featid]), repr(node.featval)
-                visit(node.left, [path; "$feature < $cut"])
-                visit(node.right, [path; "$feature >= $cut"])
+                label, cut = string(cols[node.featid]), repr(node.featval)
+                visit(node.left, [path; "$label < $cut"])
+                visit(node.right, [path; "$label >= $cut"])
             end
         end
-        visit(tree.node, String[])
+        visit(t.node, String[])
         DataFrame(rows)
     end
-    importance = let
-        values = DecisionTree.impurity_importance(tree)
-        normalized = sum(values) > 0 ? values ./ sum(values) : zeros(length(feature_cols))
-        sort(DataFrame(Feature=string.(feature_cols), Importance=normalized), :Importance; rev=true)
-    end
-    rules = leaf_rules(tree, feature_cols)
+    rules = leaf_rules(tree, selected_cv.spec.cols)
     @assert sum(rules.TrainingN) == length(ytrain)
-    @assert minimum(rules.TrainingN) >= tuning.best.leaf
-    @assert isapprox(sum(rules.TrainingN .* rules.PNeedsAction)/length(ytrain),
+    @assert minimum(rules.TrainingN) >= selected_cv.summary.MinLeaf
+    @assert isapprox(sum(rules.TrainingN .* rules.NeedsAction_pct) / (100*length(ytrain)),
                      mean(ytrain .== "NeedsAction"); atol=1e-12)
-    rules
+    importance = let
+        v = DecisionTree.impurity_importance(tree)
+        normalized = sum(v) > 0 ? v ./ sum(v) : zeros(length(v))
+        sort(DataFrame(Feature=string.(selected_cv.spec.cols), Importance=normalized),
+            :Importance; rev=true)
+    end
+    rounded_table(rules)
 end
 
-# ╔═╡ c54a49d8-9cc8-4af0-9af0-956a87bfb40a
-importance_plot = bar(importance.Feature, importance.Importance;
+# ╔═╡ 3885a838-00be-41c7-9804-fe7b3dd49a83
+importance_figure = bar(importance.Feature, importance.Importance;
     xlabel="Predictor", ylabel="Normalized Gini importance", xrotation=35,
-    title="Decision-tree predictor importance", legend=false, figure_style...)
+    title="Selected tree — predictor importance", legend=false, figure_style...)
 
-# ╔═╡ 77ec91d2-fc0d-4b54-a26a-dfa71b787af1
+# ╔═╡ dfcaed71-dabe-4207-9980-863e35da09a6
+let
+    loss_text(x) = string(round(x; digits=6))
+    percent_text(x) = isnan(x) ? "undefined (no positive predictions)" :
+        string(round(100 * x; digits=2), "%")
+
+    test_comparison = if final_fit.test.LogLoss < baseline_fit.test.LogLoss
+        "The selected tree had lower test log loss than the fixed baseline."
+    elseif final_fit.test.LogLoss > baseline_fit.test.LogLoss
+        "The selected tree had higher test log loss than the fixed baseline."
+    else
+        "The selected tree and fixed baseline had identical test log loss."
+    end
+end
+
+# ╔═╡ 71a2e3d1-626f-4605-93c8-9c3a4b10e841
 md"""
-# Results and Limitations
+# Results and discussion
 
-Model selection retained a maximum depth of $(tuning.best.depth) and a minimum leaf size of $(tuning.best.leaf). The fitted tree has $(model_summary.ActualDepth) split levels and $(model_summary.Leaves) leaves. At the $(probability_cutoff) cutoff, test accuracy was $(round(100 * test_metrics.Accuracy; digits=1))%, precision was $(isnan(test_metrics.Precision) ? "undefined (no positive predictions)" : string(round(100 * test_metrics.Precision; digits=1), "%")), and recall was $(round(100 * test_metrics.Recall; digits=1))%.
+Mean validation log loss was $(round(baseline_cv.summary.CV_LogLoss; digits=4))
+for the fixed baseline. The best feature-only configuration was
+$(feature_winner.spec.name), with validation log loss of
+$(round(feature_winner.summary.CV_LogLoss; digits=4)).
+Tuning the baseline predictors produced a minimum validation log loss of
+$(round(hyper_winner.summary.CV_LogLoss; digits=4)).
 
-Test log loss was $(round(test_metrics.LogLoss; digits=4)), compared with $(round(baseline_metrics.LogLoss; digits=4)) for the prevalence reference. The model missed $(test_metrics.FN) NeedsAction observations and incorrectly flagged $(test_metrics.FP) DoNothing observations.
+Joint selection retained $(selected_cv.spec.name), with maximum depth
+$(selected_cv.summary.Depth), minimum leaf size $(selected_cv.summary.MinLeaf),
+and validation log loss $(round(selected_cv.summary.CV_LogLoss; digits=4)).
+The fitted tree had $(model_summary.ActualDepth) split levels and
+$(model_summary.Leaves) terminal leaves. Its predictors were
+$(join(string.(selected_cv.spec.cols), ", ")).
 
-These results describe held-out assessment records, not verified performance on unseen components or future assessments. Component overlap and predictor availability before the target assessment require consideration before prospective use.
+Test log loss was $(round(baseline_fit.test.LogLoss; digits=4)) for the baseline
+and $(round(final_fit.test.LogLoss; digits=4)) for the selected tree. At the
+$(round(100 * probability_cutoff; digits=1))% cutoff, the selected tree achieved
+$(round(100 * test_metrics.Accuracy; digits=2))% accuracy, precision of
+$(isnan(test_metrics.Precision) ? "undefined (no positive predictions)" : string(round(100 * test_metrics.Precision; digits=2), "%")),
+and $(round(100 * test_metrics.Recall; digits=2))% recall.
+
+The model missed $(test_metrics.FN) below-threshold assessments and incorrectly
+flagged $(test_metrics.FP) assessments at or above the threshold. These errors
+complement log loss when assessing usefulness for assessment planning.
 """
+
+# ╔═╡ de91e310-e274-430f-9f97-48258fde6400
+let
+    folder = joinpath(project_dir, "reports", "figures")
+    mkpath(folder)
+
+    savefig(
+        hyperparameter_figure,
+        joinpath(folder, "DT_Hyperparameter_Optimization.png"),
+    )
+
+    savefig(
+        confusion_figure,
+        joinpath(folder, "DT_Confusion_Matrix.png"),
+    )
+
+    savefig(
+        importance_figure,
+        joinpath(folder, "DT_Feature_Importance.png"),
+    )
+
+    "Saved decision-tree figures to: $folder"
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -469,10 +633,11 @@ CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DecisionTree = "7806a523-6efd-50cb-b5f6-3fa6f1930dbb"
+InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 MLJBase = "a7f614a8-145f-11e9-1d2a-a57a1082229d"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
 
@@ -492,7 +657,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.13.0"
 manifest_format = "2.1"
-project_hash = "ac3364d606d038482bd4be847d33b8bfad4280fa"
+project_hash = "b0341f15af1e0f4eef885b8345bc33f9918fdbb2"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -2651,28 +2816,35 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╟─55f052d6-6bfe-414c-87e3-ba99d674a8c0
 # ╠═b078a14b-049e-4398-9c79-85ef7fde2843
 # ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
-# ╟─cdfc67fe-93bf-46ba-b19c-30c90f54f011
-# ╠═5a3a0107-bed6-440a-9805-5a2b9b483b72
+# ╟─5a3a0107-bed6-440a-9805-5a2b9b483b72
 # ╠═139075ff-92d9-480a-b53b-4bca487b100f
 # ╠═3b280832-9ad9-437c-becd-e79eb3a51e91
-# ╟─d7f18f6d-7669-402c-8814-aa0d5a7c39d2
-# ╠═eb08c937-ac10-4ce0-9474-c1b65900c48c
-# ╠═a1b1717b-c6eb-4b72-a0de-35972e8ea718
-# ╟─7d26ba63-1434-40a6-96c7-9d5f4c00135f
+# ╠═d7f18f6d-7669-402c-8814-aa0d5a7c39d2
+# ╠═7d26ba63-1434-40a6-96c7-9d5f4c00135f
 # ╠═661416fe-494a-4057-ab7b-8b1bf6173a9e
 # ╠═d1ce4302-d470-42d2-923f-a27aa37a411e
-# ╟─774e81d0-6dd3-4ee7-b882-51abc06b2bc5
+# ╠═774e81d0-6dd3-4ee7-b882-51abc06b2bc5
 # ╟─a90c078d-09a9-42b3-af5d-87aaa4e3de23
-# ╟─b605ff55-7ade-4e03-9652-126d0b2d376b
+# ╠═b605ff55-7ade-4e03-9652-126d0b2d376b
 # ╟─a7dba1b2-5d9f-47e7-bffc-e23412ab9673
-# ╟─fc29dbcf-0459-4294-aaa2-8e6655938027
+# ╠═fc29dbcf-0459-4294-aaa2-8e6655938027
 # ╠═ad5ad4d4-cf9c-4883-9ade-2d517c8080f1
 # ╠═cb9ed9bf-b7be-40e4-806f-9ebdea329373
-# ╟─eaab2057-3995-4816-9c8d-814c9eccddc3
+# ╠═eaab2057-3995-4816-9c8d-814c9eccddc3
 # ╠═f25e2670-990d-466c-84ad-e3a0bc79b5eb
-# ╟─84177c62-be6f-40c4-a468-2766430d45e5
+# ╠═84177c62-be6f-40c4-a468-2766430d45e5
 # ╠═709b46d9-ed61-46db-b61e-0bfed96e821b
 # ╠═c54a49d8-9cc8-4af0-9af0-956a87bfb40a
-# ╟─77ec91d2-fc0d-4b54-a26a-dfa71b787af1
+# ╠═77ec91d2-fc0d-4b54-a26a-dfa71b787af1
+# ╠═2a5ad38b-c3fc-47fd-bce0-98dd17621197
+# ╠═2354a3bc-601f-4b62-b0af-2f3686e14199
+# ╠═71a76853-f155-4765-85c6-ec757801c95f
+# ╠═970edf67-3f2c-4329-853c-a4066d8c9635
+# ╠═6b7a25a1-27e7-489d-a919-28c4a2d9b539
+# ╠═7e9f8f44-560c-4655-aa48-12086f23667d
+# ╠═3885a838-00be-41c7-9804-fe7b3dd49a83
+# ╠═dfcaed71-dabe-4207-9980-863e35da09a6
+# ╠═71a2e3d1-626f-4605-93c8-9c3a4b10e841
+# ╠═de91e310-e274-430f-9f97-48258fde6400
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
