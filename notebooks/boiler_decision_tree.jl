@@ -375,7 +375,7 @@ end;
 # ╔═╡ cb9ed9bf-b7be-40e4-806f-9ebdea329373
 hyperparameter_figure = let
     p = plot(; xlabel="Maximum depth", ylabel="Mean validation log loss",
-        title="Tree complexity", figure_style...)
+        figure_style...)
     for l in leaf_grid
         t = sort(hyper_results[hyper_results.MinLeaf .== l, :], :Depth)
         plot!(p, t.Depth, t.CV_LogLoss; marker=:circle, linewidth=3,
@@ -522,7 +522,6 @@ confusion_figure = let
         ylabel="Predicted class",
         color=:Blues,
         colorbar_title="\u200B\nCount",
-        title="Confusion matrix",
         style...,
     )
     for row in 1:2, col in 1:2
@@ -568,8 +567,7 @@ end
 
 # ╔═╡ 3885a838-00be-41c7-9804-fe7b3dd49a83
 importance_figure = bar(importance.Feature, importance.Importance;
-    xlabel="Predictor", ylabel="Normalized Gini importance", xrotation=35,
-    title="Selected tree — predictor importance", legend=false, figure_style...)
+    xlabel="Predictor", ylabel="Normalized Gini importance", xrotation=35, legend=false, figure_style...)
 
 # ╔═╡ dfcaed71-dabe-4207-9980-863e35da09a6
 let
