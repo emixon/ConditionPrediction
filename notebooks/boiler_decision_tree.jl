@@ -398,7 +398,7 @@ end;
 # ╔═╡ cb9ed9bf-b7be-40e4-806f-9ebdea329373
 hyperparameter_figure = let
     p = plot(; xlabel="Maximum depth", ylabel="Mean validation log loss",
-        title="Tree complexity — baseline eight predictors", figure_style...)
+        title="Tree complexity", figure_style...)
     for l in leaf_grid
         t = sort(hyper_results[hyper_results.MinLeaf .== l, :], :Depth)
         plot!(p, t.Depth, t.CV_LogLoss; marker=:circle, linewidth=3,
@@ -2844,10 +2844,10 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 
 # ╔═╡ Cell order:
 # ╠═e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
-# ╟─154d00f9-6536-4f1a-ab29-510b54c4e303
-# ╟─55f052d6-6bfe-414c-87e3-ba99d674a8c0
+# ╠═154d00f9-6536-4f1a-ab29-510b54c4e303
+# ╠═55f052d6-6bfe-414c-87e3-ba99d674a8c0
 # ╠═b078a14b-049e-4398-9c79-85ef7fde2843
-# ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# ╠═ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
 # ╠═5a3a0107-bed6-440a-9805-5a2b9b483b72
 # ╠═139075ff-92d9-480a-b53b-4bca487b100f
 # ╠═3b280832-9ad9-437c-becd-e79eb3a51e91
@@ -2856,26 +2856,26 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═661416fe-494a-4057-ab7b-8b1bf6173a9e
 # ╠═d1ce4302-d470-42d2-923f-a27aa37a411e
 # ╠═774e81d0-6dd3-4ee7-b882-51abc06b2bc5
-# ╟─a90c078d-09a9-42b3-af5d-87aaa4e3de23
+# ╠═a90c078d-09a9-42b3-af5d-87aaa4e3de23
 # ╠═b605ff55-7ade-4e03-9652-126d0b2d376b
-# ╟─a7dba1b2-5d9f-47e7-bffc-e23412ab9673
+# ╠═a7dba1b2-5d9f-47e7-bffc-e23412ab9673
 # ╠═fc29dbcf-0459-4294-aaa2-8e6655938027
 # ╠═ad5ad4d4-cf9c-4883-9ade-2d517c8080f1
 # ╠═cb9ed9bf-b7be-40e4-806f-9ebdea329373
 # ╠═eaab2057-3995-4816-9c8d-814c9eccddc3
 # ╠═f25e2670-990d-466c-84ad-e3a0bc79b5eb
-# ╟─84177c62-be6f-40c4-a468-2766430d45e5
+# ╠═84177c62-be6f-40c4-a468-2766430d45e5
 # ╠═709b46d9-ed61-46db-b61e-0bfed96e821b
 # ╠═c54a49d8-9cc8-4af0-9af0-956a87bfb40a
-# ╟─77ec91d2-fc0d-4b54-a26a-dfa71b787af1
+# ╠═77ec91d2-fc0d-4b54-a26a-dfa71b787af1
 # ╠═2a5ad38b-c3fc-47fd-bce0-98dd17621197
 # ╠═2354a3bc-601f-4b62-b0af-2f3686e14199
 # ╠═71a76853-f155-4765-85c6-ec757801c95f
-# ╟─970edf67-3f2c-4329-853c-a4066d8c9635
+# ╠═970edf67-3f2c-4329-853c-a4066d8c9635
 # ╠═6b7a25a1-27e7-489d-a919-28c4a2d9b539
 # ╠═7e9f8f44-560c-4655-aa48-12086f23667d
 # ╠═3885a838-00be-41c7-9804-fe7b3dd49a83
-# ╟─a626b662-670a-466d-b404-65c30058f08c
-# ╟─de91e310-e274-430f-9f97-48258fde6400
+# ╠═a626b662-670a-466d-b404-65c30058f08c
+# ╠═de91e310-e274-430f-9f97-48258fde6400
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
