@@ -480,30 +480,40 @@ The relevant types of machine learning models that will be tested and cross vali
 
 \subsection{Regression Modeling}
 
-OLS regression:
-$y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \dots + \beta_p x_p + \epsilon$
+As a first attempt at predictive modeling of the data, three different types of linear regression models were constructed to predict a building's Score, treated in this case as a continuous variable, using the independent variables in the wrangled dataset (RSL, PredictedCI, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate). All regression models were constructed using Julia's MLJ package.
 
+The first model was an ordinary least squares (OLS) regression model. The OLS regression model has the following form:
+\[
+y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \dots + \beta_p x_p + \epsilon
+\]
 where $y$ is a vector of the observed dependent variable values (in this case, Score), $\beta$ is a vector of coefficients, $x_p$ are dependent variables, and $\epsilon$ is a random error term.
 
-The objective function for ordinary least squares regression is:
+Additionally, OLS regression minimizes the squared $L_2$ norm. The objective function for ordinary least squares regression is given as 
+\[
+\hat{\beta_{OLS}} = \underset{\beta}{\operatorname{argmin}} \lVert y - X\beta \rVert_2^2
+\]
+where $\hat{\beta}$ is a vector of the estimated regression coefficients $\beta$.
 
-$\hat{\beta} = \underset{\beta}{\operatorname{argmin}} \lVert y - X\beta \rVert_2^2$
+The second type of linear regression model, ridge regression, keeps the same model form as the OLS regression model, while adding a squared $L_2$ norm regularization term to the objective function. Regularization penalizes models that have large coefficients, and $L_2$ regularization pushes the values of small-valued parameters towards zero. The ridge regression objective function is given by:
+\[
+\hat{\beta}_{\text{Ridge}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_2^2 \right)
+\]
+where $\lambda$ is a hyperparameter coefficient that specifies the strength of the regularization. For our model, $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package.
 
-Ridge Regression: adds $L_2$ regularization term to OLS objective function
+Finally, the third type of linear regression model, lasso regression, also keeps the same model form as the OLS regression model, but instead adds an $L_1$ norm regularization term to the OLS objective function. $L_1$ regularization also pushes the values of small-valued parameters to be smaller, but not nearly as strongly as $L_2$ regularization. The lasso regression objective function is given by:
+\[
+\hat{\beta}_{\text{Lasso}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_1 \right)
+\]
+Again, for the laso regression model, $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package.
 
-$\hat{\beta}_{\text{Ridge}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_2^2 \right)$
+Prior to training each of these models, the data were randomly partitioned into training ($80\%$) and testing ($20\%$). The OLS model was fit using the training dataset. Similarly, for the Ridge and Lasso models, once  $\lambda$ was tuned using five-fold cross validation of the testing set, the model was then fit using the full training dataset. Finally, performance was evaluated using the held out testing $20\%$ of the data. Table \ref{tab:performance_comparison} compares the coefficient of determination $R^2$, mean absolute error (MAE), and root mean square error (RMSE) for the OLS, Ridge, and Lasso models and training and testing datasets. Table \ref{tab:coefficient_comparison} shows the model coefficients for the three models, as well as the tuned $\lambda$ values for the Ridge and Lasso models. Additionally, Figures \ref{fig:ols_performance}, \ref{fig:ridge_performance}, and \ref{fig:lasso_performance} plot the predicted versus actual Score values for the OLS, Ridge, and Lasso models, respectively. Note that while Score was modeled as a continuous variable in this case, in practice it is assigned specific rating values (see definitions in \ref{table:AssessmentScores}), which accounts for the vertical bands of points in the scatter plots.
 
-Lasso regression: adds $L_1$ regularization term to OLS objective funnction
-
-$\hat{\beta}_{\text{Lasso}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_1 \right)$
-
-
-
+From these results, we see that the performance of the three models were nearly identical, with poor but very similar training and testing $R^2$, MAE, and RMSE values for all three models. For example, the training and testing $R^2$ values for all three models were approximately 0.221 and $0.202$, respectively. Additionally, the fitted model coefficients were very similar across the three models, and the tuned $\lambda$ values were relatively small, with the largest coefficient being 3.5687 for the RSL feature in the Lasso model. The similarly poor performance of the training and testing datasets, along with the similarity of the OLS, Ridge, and Lasso models, suggest that overfitting is not a problem with this dataset and model configuration (and therefore regularization is not necessary), but that the linear regression model is simply not a good fit for the data.
 
 
 \begin{table}[htbp]
 \centering 
-\caption{Comparison of OLS, Ridge, and Lasso regression performance on training and test datasets.} 
+\caption{Comparison of OLS, Ridge, and Lasso regression performance on training and testing datasets.} 
 \begin{tabular}{llccc}
 \hline
 Model & Dataset & $R^2$ & MAE & RMSE \\
@@ -608,6 +618,22 @@ Model & Dataset & Accuracy \\
 \caption{Histogram of Residuals from the Lasso Regression Model}
 \label{fig:lasso_residuals_hist}
 \end{figure}
+
+As an additional measure of model performance, because the underlying objective is a classification problem to predict whether a boiler "Needs Action" (Score $\geq$ 88) or requires no maintenance ("Do Nothing," Score $< 88$), the predicted scores were converted to a categorical dataset using these two maintenance categories and cutoff values. The accuracy of the model to correctly predict "Needs Action" and "Do Nothing" maintenance status was then calculated and is shown in Table \ref{tab:reg_model_accuracy}. Once again, we see that the OLS, Ridge, and Lasso models perform similarly, and in the case of the classification problem, actually identically. Likewise, the training and testing datasets experience similarly poor predictive performance, with an accarcy of $66.1407\%$ and $66.0171\%$ in testing for all three models.
+
+\begin{table}[htbp] 
+\centering 
+\begin{tabular}{lcc} 
+\toprule Model & Train Accuracy (\%) & Test Accuracy (\%) \\ 
+\midrule 
+OLS & 66.1407 & 66.0171 \\ 
+Ridge & 66.1407 & 66.0171 \\ 
+Lasso & 66.1407 & 66.0171 \\ 
+\bottomrule 
+\end{tabular} \caption{Comparison of training and testing maintenance classification accuracy for the OLS, Ridge, and Lasso regression models.} 
+\label{tab:reg_model_accuracy} 
+\end{table}
+
 
 \begin{figure}
 \centering
