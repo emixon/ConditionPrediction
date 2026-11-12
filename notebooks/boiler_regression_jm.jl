@@ -640,6 +640,18 @@ function model_accuracy(y_test, y_train, ŷ_test, ŷ_train)
 	return test_accuracy, train_accuracy
 end
 
+# ╔═╡ 5016e7fd-380b-4a38-8e7a-7e63cbb1518a
+begin
+    ols_coefs = fitted_params(mach_ols).linear_regressor.coefs
+
+    ols_coef_df = DataFrame(
+        Feature = feature_cols,
+        Coefficient = ols_coefs
+    )
+
+    ols_coef_df
+end
+
 # ╔═╡ 618282f9-e415-4a17-b8f0-92e92e6a7668
 begin
 	plot_performance(y_train_ols, y_test_ols, ŷ_train_ols, ŷ_test_ols)
@@ -723,6 +735,24 @@ model_accuracy(y_test_ridge, y_train_ridge, ŷ_test_ridge, ŷ_train_ridge)
 # ╔═╡ 7bba9815-2ec7-477f-88b9-30e8d785ad62
 fitted_params(mach_ridge)
 
+# ╔═╡ d7c76249-16a5-4116-9f00-7b2c8a5ed474
+begin
+    fp_ridge = fitted_params(mach_ridge)
+
+    ridge_coefs = fp_ridge.deterministic_tuned_model.best_fitted_params.coefs
+
+    ridge_lambda =
+        report(mach_ridge).deterministic_tuned_model.best_model.lambda
+
+    ridge_coef_df = DataFrame(
+        Feature = feature_cols,
+        Coefficient = ridge_coefs
+    )
+
+    ridge_coef_df, ridge_lambda
+end
+
+
 # ╔═╡ f8d5ee66-ddf4-4c5a-ad92-aea4da10fcce
 md"""
 ## Lasso Regression
@@ -797,6 +827,38 @@ model_accuracy(y_test_lasso, y_train_lasso, ŷ_test_lasso, ŷ_train_lasso)
 
 # ╔═╡ edd27b43-8204-444a-82a8-43ec5170b5f4
 fitted_params(mach_lasso)
+
+# ╔═╡ fe3e29de-2765-45f6-9c6f-d67d90756d4d
+begin
+    fp_lasso = fitted_params(mach_lasso)
+
+    lasso_coefs = fp_lasso.deterministic_tuned_model.best_fitted_params.coefs
+
+    lasso_lambda =
+        report(mach_lasso).deterministic_tuned_model.best_model.lambda
+
+    lasso_coef_df = DataFrame(
+        Feature = feature_cols,
+        Coefficient = lasso_coefs
+    )
+
+    lasso_coef_df, lasso_lambda
+end
+
+# ╔═╡ 6fb87d58-690b-489a-bde9-8e86f717c19a
+begin
+    coefficient_df = DataFrame(
+        Parameter = vcat(feature_cols, ["Lambda"]),
+        OLS = vcat(ols_coefs, [missing]),
+        Ridge = vcat(ridge_coefs, [ridge_lambda]),
+        Lasso = vcat(lasso_coefs, [lasso_lambda])
+    )
+
+    coefficient_df
+end
+
+# ╔═╡ 86b015ac-f3cd-45e6-bbe0-6614522928f2
+report(mach_ridge).deterministic_tuned_model.best_history_entry.model.lambda
 
 # ╔═╡ 8c8eefa7-f702-4185-bf11-02722c577fed
 md"""
@@ -908,43 +970,49 @@ end
 
 # ╔═╡ e47deada-667c-42d6-b7f6-3667bb33fd00
 begin
-    y_prob = MLJ.predict(mach_logistic, X[test_rows, :])
-
-    positive_class = levels(y_cat)[2]
-
-    probs = pdf.(y_prob, positive_class)
-
-    actual_positive = y_cat[test_rows] .== positive_class
-    actual_negative = .!actual_positive
-
-    histogram(
-        probs[actual_positive];
-        alpha = 0.5,
-        bins = 20,
-        normalize = :pdf,
-        label = "Actual Positive (Needs Action)",
-        xlabel = "Predicted Probability",
-        ylabel = "Density",
-        size = (1600, 1000),
-        dpi = 200,
-        titlefontsize = 40,
-        guidefontsize = 30,
-        tickfontsize = 24,
-        legendfontsize = 24,
-        left_margin = 18mm,
-        bottom_margin = 20mm,
-        top_margin = 10mm,
-        right_margin = 10mm,
-    )
-
-    histogram!(
-        probs[actual_negative];
-        alpha = 0.5,
-        bins = 20,
-        normalize = :pdf,
-        label = "Actual Negative (Do Nothing)"
-    )
-    savefig("logistic_prob_separation_hist.png")	
+    begin
+        y_prob = MLJ.predict(mach_logistic, X[test_rows, :])
+    
+        positive_class = levels(y_cat)[2]
+    
+        probs = pdf.(y_prob, positive_class)
+    
+        actual_positive = y_cat[test_rows] .== positive_class
+        actual_negative = .!actual_positive
+    
+        histogram(
+            probs[actual_negative];
+            alpha = 0.55,
+            bins = 20,
+            normalize = :pdf,
+            label = "Observed DoNothing",
+            color = :steelblue
+        )
+    
+        histogram!(
+            probs[actual_positive];
+            alpha = 0.55,
+            bins = 20,
+            normalize = :pdf,
+            label = "Observed NeedsAction",
+            xlabel = "Predicted P(Needs Action)",
+            ylabel = "Proportion Within Observed Class",
+            color = :darkorange,
+            titlefontsize = 40,
+            guidefontsize = 30,
+            tickfontsize = 24,
+            legendfontsize = 20,
+    
+            size = (1200, 1000),
+            dpi = 200,
+    
+            left_margin = 28mm,
+            bottom_margin = 20mm,
+            top_margin = 14mm,
+            right_margin = 18mm,
+        )
+    end
+savefig("log_prob_sep_hist.png")
 end
 
 # ╔═╡ 3cde7233-438d-4cb4-aeac-ef6cadb7e22d
@@ -4229,6 +4297,7 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╟─d05b79c4-0235-45a1-933d-c8147e7b0e0b
 # ╠═3b280832-9ad9-437c-becd-e79eb3a51e91
 # ╠═a12d3efa-e011-4939-bc03-ee75cf72d5d0
+# ╠═5016e7fd-380b-4a38-8e7a-7e63cbb1518a
 # ╠═618282f9-e415-4a17-b8f0-92e92e6a7668
 # ╠═39d6f28c-405a-4eb7-95dd-dd01c8de7f25
 # ╠═f92f7120-79fd-4c0b-8632-e29cb161788a
@@ -4240,6 +4309,7 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═6a054746-79b0-4f1f-98a0-05da22b2b6cc
 # ╠═62a5eea0-e180-43ed-9f5b-1a190a625e48
 # ╠═7bba9815-2ec7-477f-88b9-30e8d785ad62
+# ╠═d7c76249-16a5-4116-9f00-7b2c8a5ed474
 # ╟─f8d5ee66-ddf4-4c5a-ad92-aea4da10fcce
 # ╟─59bf7ef6-c3bf-4cf5-96ef-36335f333327
 # ╠═af2f63ab-3172-4e1f-950e-8449197da08e
@@ -4248,6 +4318,9 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═ae81bb04-0644-478d-80ff-7cf7ed4691db
 # ╠═e9f6b1c5-35d6-4470-9360-f0e546465009
 # ╠═edd27b43-8204-444a-82a8-43ec5170b5f4
+# ╠═fe3e29de-2765-45f6-9c6f-d67d90756d4d
+# ╠═6fb87d58-690b-489a-bde9-8e86f717c19a
+# ╠═86b015ac-f3cd-45e6-bbe0-6614522928f2
 # ╟─8c8eefa7-f702-4185-bf11-02722c577fed
 # ╠═1a443f32-e338-45e6-b6ce-39bcccb3a8dd
 # ╠═424c1659-f241-4eab-93fa-02be380bbb2c

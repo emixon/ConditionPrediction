@@ -19,6 +19,8 @@
 \usepackage{newtxtext,newtxmath}
 \usepackage{placeins}
 \usepackage[colorlinks=true,citecolor=red,linkcolor=black]{hyperref}
+\usepackage{multirow}
+\usepackage{booktabs}
 %
 % Please add the first author's last name here for the footer:
 % \NameTag{AuthorOneLastName, \today}
@@ -475,6 +477,107 @@ The relevant types of machine learning models that will be tested and cross vali
 \FloatBarrier
 
 \section{Preliminary Modeling}
+
+\subsection{Regression Modeling}
+
+$y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \dots + \beta_p x_p + \epsilon$
+
+$\min_{\beta} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2$
+
+\begin{table}[htbp]
+\centering 
+\caption{Comparison of OLS, Ridge, and Lasso regression performance on training and test datasets.} 
+\begin{tabular}{llccc}
+\hline
+Model & Dataset & $R^2$ & MAE & RMSE \\
+\hline
+\multirow{2}{*}{OLS}
+& Train & 0.2208 & 6.8521 & 11.6591 \\
+& Test & 0.2024 & 7.0074 & 11.8143 \\
+\multirow{2}{*}{Ridge}
+& Train & 0.2207 & 6.8481 & 11.6593 \\
+& Test & 0.2025 & 7.0031 & 11.8134 \\
+\multirow{2}{*}{Lasso}
+& Train & 0.2207 & 6.8518 & 11.6591 \\
+& Test & 0.2024 & 7.0064 & 11.8145 \\
+\hline
+\end{tabular}
+\label{tab:performance_comparison}
+\end{table}
+
+
+\begin{table}[htbp]
+\centering
+\caption{Comparison of OLS, Ridge, and Lasso model coefficients. Ridge and Lasso values include the optimized regularization parameter $\lambda$.}
+\begin{tabular}{lccc}
+\toprule
+& \multicolumn{3}{c}{Model Coefficients} \\
+\cmidrule(lr){2-4}
+Feature & OLS & Ridge & Lasso \\
+$\lambda$ & -- & 0.0162378 & 0.00127427 \\
+\midrule
+RSL & 3.50085 & 3.3656 & 3.5687 \\
+PredictedCI & 2.51449 & 2.5951 & 2.44886 \\
+PrevAssessed & -0.893353 & -0.916602 & -0.872356 \\
+NormalizedAssetAge & -0.269221 & -0.272472 & -0.26837 \\
+MonthSin & -0.0863573 & -0.0910675 & -0.0827251 \\
+MonthCos & -0.215775 & -0.211968 & -0.21516 \\
+LogCRV & -0.422126 & -0.41774 & -0.420984 \\
+Climate & -0.305429 & -0.298896 & -0.306704 \\
+\bottomrule
+\end{tabular}
+\label{tab:coefficient_comparison}
+\end{table}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{ols_performance.png}
+\caption{Predictive Performance of the OLS Regression Model}
+\label{fig:ols_performance}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{ols_residuals_hist.png}
+\caption{Histogram of Residuals from the OLS Regression Model}
+\label{fig:ols_residuals_hist}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{ridge_performance.png}
+\caption{Predictive Performance of the Ridge Regression Model}
+\label{fig:ridge_performance}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{ridge_residuals_hist.png}
+\caption{Histogram of Residuals from the Ridge Regression Model}
+\label{fig:ridge_residuals_hist}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{lasso_performance.png}
+\caption{Predictive Performance of the Lasso Regression Model}
+\label{fig:lasso_performance}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{lasso_residuals_hist.png}
+\caption{Histogram of Residuals from the Lasso Regression Model}
+\label{fig:lasso_residuals_hist}
+\end{figure}
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{log_prob_sep_hist.png}
+\caption{Predicted Probability by Observed Region for the Logistic Regression Model}
+\label{fig:lasso_residuals_hist}
+\end{figure}
+
 
 \subsection{Artificial Neural Network (ANN)}
 
