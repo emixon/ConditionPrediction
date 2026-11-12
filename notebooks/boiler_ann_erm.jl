@@ -1396,7 +1396,7 @@ begin
 
     #savefig(p1, "ANN_Probabilities_By_Region.png")
     #savefig(p2, "ANN_Prediction_Reliabilty.png")
-    savefig(p3, "ANN_Cutoff_Tradeoff.png")
+    #savefig(p3, "ANN_Cutoff_Tradeoff.png")
 end
 
 # ╔═╡ d3b4eed4-e5f1-4cdf-b8ca-88c66c9edb43
@@ -4121,17 +4121,17 @@ version = "1.13.0+0"
 # ╠═1769db6e-35f5-4c79-82e0-6794ea11b347
 # ╠═a1b1717b-c6eb-4b72-a0de-35972e8ea718
 # ╠═e2f6d11f-b1d4-4cd8-ade9-d0b8215acc27
-# ╟─3cde7233-438d-4cb4-aeac-ef6cadb7e22d
+# ╠═3cde7233-438d-4cb4-aeac-ef6cadb7e22d
 # ╟─661416fe-494a-4057-ab7b-8b1bf6173a9e
 # ╟─49ba444f-c820-469b-98e3-8d11f61b5229
 # ╠═f5353a5f-ff02-4d3c-81d1-b54355d898f7
 # ╠═d1ce4302-d470-42d2-923f-a27aa37a411e
-# ╟─d3b4eed4-e5f1-4cdf-b8ca-88c66c9edb43
-# ╟─920b4200-3b99-48e9-906e-d637bfdacb08
-# ╟─31d24c17-120a-4996-9d97-df960ef02a04
-# ╟─e03990da-c44e-4bc5-bb1c-a183fe838ac4
-# ╟─1b022b5f-635e-446a-9fb5-a7fdac9f1a7e
-# ╟─d978e03b-5188-41a3-ba0e-1586f049659f
-# ╟─96546945-c144-4d79-85dc-780eb6aac97f
+# ╠═d3b4eed4-e5f1-4cdf-b8ca-88c66c9edb43
+# ╠═920b4200-3b99-48e9-906e-d637bfdacb08
+# ╠═31d24c17-120a-4996-9d97-df960ef02a04
+# ╠═e03990da-c44e-4bc5-bb1c-a183fe838ac4
+# ╠═1b022b5f-635e-446a-9fb5-a7fdac9f1a7e
+# ╠═d978e03b-5188-41a3-ba0e-1586f049659f
+# ╠═96546945-c144-4d79-85dc-780eb6aac97f
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
