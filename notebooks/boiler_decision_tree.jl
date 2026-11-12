@@ -635,6 +635,29 @@ measures should be considered alongside log loss when judging the model's
 potential usefulness for assessment planning.
 """
 
+# ╔═╡ de91e310-e274-430f-9f97-48258fde6400
+let
+    folder = joinpath(project_dir, "reports", "figures")
+    mkpath(folder)
+
+    savefig(
+        hyperparameter_figure,
+        joinpath(folder, "DT_Hyperparameter_Optimization.png"),
+    )
+
+    savefig(
+        confusion_figure,
+        joinpath(folder, "DT_Confusion_Matrix.png"),
+    )
+
+    savefig(
+        importance_figure,
+        joinpath(folder, "DT_Feature_Importance.png"),
+    )
+
+    "Saved decision-tree figures to: $folder"
+end
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -2853,5 +2876,6 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═7e9f8f44-560c-4655-aa48-12086f23667d
 # ╠═3885a838-00be-41c7-9804-fe7b3dd49a83
 # ╟─a626b662-670a-466d-b404-65c30058f08c
+# ╟─de91e310-e274-430f-9f97-48258fde6400
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
