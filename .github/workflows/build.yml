@@ -16,25 +16,12 @@ jobs:
       - name: Compile LaTeX document
         uses: xu-cheng/latex-action@v4
         with:
-          root_file: ./introduction.tex 
-          working_directory: ./reports/introduction/ 
-
-      - name: Compile LaTeX document
-        uses: xu-cheng/latex-action@v4
-        with:
-          root_file: ./exploratory.tex
-          working_directory: ./reports/exploratory/
+          root_file: ./ConditionPrediction.tex
+          working_directory: ./report/
 
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v7
         with:
-          name: intro-pdf
+          name: report
           archive: false
-          path: ./reports/introduction/introduction.pdf 
-
-      - name: Upload PDF artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: exploratory-analysis-pdf 
-          archive: false
-          path: ./reports/exploratory/exploratory.pdf
+          path: ./report/ConditionPrediction.pdf
