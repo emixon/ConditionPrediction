@@ -15,26 +15,18 @@ end
 # ╔═╡ 154d00f9-6536-4f1a-ab29-510b54c4e303
 md"""
 # Decision Tree Analysis
-### Assessment outcome probability model
 
-The decision-tree model is intended to support condition-assessment planning by
-estimating the probability that a boiler assessment falls within each maintenance
-decision region, rather than predicting a single condition score. Assessments with
-Score greater than or equal to 85 are classified as `DoNothing`, while assessments
-below 85 are classified as `NeedsAction`.
-
-The predictors describe lifecycle characteristics, modeled condition,
-assessment-history availability, season, replacement cost, and climate. The analysis
-begins with a fixed baseline tree, examines alternative predictor combinations and
-tree-complexity settings, and evaluates the selected configuration on held-out
-assessment records.
+The model estimates whether a boiler assessment belongs to `DoNothing`
+(Score ≥ 85) or `NeedsAction` (Score < 85), using lifecycle, modeled-condition,
+history, seasonal, cost, and climate predictors. The analysis compares a fixed
+baseline with alternative feature sets and tree-complexity settings, then
+evaluates the selected configuration on held-out records.
 """
 
 # ╔═╡ 55f052d6-6bfe-414c-87e3-ba99d674a8c0
 md"""
 # Data preparation and predictor construction
 
-The analysis retains boiler observations identified by MEC equal to 1.
 Previous-assessment availability is represented by `PrevAssessed`, which records
 whether `PrevScore` is available before missing values are replaced.
 `NormalizedAssetAge` is calculated as the ratio of `AssetAge` to `AssetDesignLife`.
@@ -86,21 +78,14 @@ end
 md"""
 # Modeling dataset and validation design
 
-All experiments use the same eligible observations. Records missing the response
-or any non-imputed predictor required by the planned experiments are removed before
-partitioning. This produces a common modeling dataset, so differences between
-feature sets are not caused by evaluating different records. The fixed baseline
-is recalculated using this dataset.
+All experiments use the same records after removing observations missing the
+response or required non-imputed predictors. A stratified 80/20 training/test
+split uses seed $(seed), and every configuration shares the same $(nfolds)
+training-validation folds. The baseline is recalculated on this common dataset.
 
-A stratified partition assigns approximately 80% of observations to training and
-20% to testing, using seed $(seed). The training subset is divided into the same
-$(nfolds) validation folds for every configuration. Missing values in `PrevScore`,
-`Recency`, and `Climate` are replaced with means calculated from the relevant
-training subset, including separately within each validation fold.
-
-The response score, the score-derived `PercentGreen` field, and record identifiers
-are excluded from the predictors. Component identifiers are retained only to
-report overlap between training and evaluation subsets.
+Missing `PrevScore`, `Recency`, and `Climate` values use training-only means,
+recalculated within each fold. `Score`, `PercentGreen`, and identifiers are
+excluded from the predictors; component IDs are retained only to check overlap.
 """
 
 # ╔═╡ 5a3a0107-bed6-440a-9805-5a2b9b483b72
@@ -328,8 +313,7 @@ md"""
 The baseline uses eight predictors: RSL, PredictedCI, PrevAssessed,
 NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate. Maximum depth is fixed
 at $(baseline_depth), and each terminal leaf must contain at least $(baseline_leaf)
-training observations. The minimum number of observations required to attempt a
-split is twice the minimum leaf size.
+training observations.
 
 The tree selects successive splits using Gini impurity and estimates the
 NeedsAction probability from the observed class proportion within each terminal
@@ -351,25 +335,18 @@ end
 md"""
 # Feature selection and hyperparameter optimization
 
-The experiments examine whether changing the available predictors or tree
-complexity improves probability prediction relative to the fixed baseline.
-Feature-removal experiments exclude RSL, PredictedCI, Climate, or PrevAssessed
-individually. Seasonal experiments remove either MonthCos alone or both month
-variables. Additional configurations introduce PrevScore and Recency,
-NormalizedAge and EffectiveAge, or all four variables together.
+Feature experiments remove RSL, PredictedCI, Climate, or PrevAssessed individually,
+remove MonthCos alone or both month variables, or add detailed history and
+lifecycle information: PrevScore and Recency, NormalizedAge and EffectiveAge,
+or all four together.
 
-Each of the $(length(feature_sets)) predictor sets is evaluated at
-$(length(depth_grid)) maximum-depth settings and $(length(leaf_grid)) minimum-leaf
-settings, giving $(length(feature_sets) * length(depth_grid) * length(leaf_grid))
-configurations. The depth limits are $(join(depth_grid, ", ")), and the minimum
-leaf sizes are $(join(leaf_grid, ", ")) observations. Every configuration uses the
-same $(nfolds)-fold validation design.
-
-Feature-only comparisons retain the baseline depth and leaf size, while
-hyperparameter-only comparisons retain the original eight predictors. The joint
-search evaluates every planned feature–parameter combination and selects the
-lowest mean validation log loss. Exact ties favor fewer predictors, shallower
-trees, and then larger leaves. Test results are not used to select the model.
+The search evaluates $(length(feature_sets)) feature sets across depth limits
+$(join(depth_grid, ", ")) and minimum leaf sizes $(join(leaf_grid, ", ")):
+$(length(feature_sets) * length(depth_grid) * length(leaf_grid)) configurations.
+Feature-only comparisons retain baseline complexity; hyperparameter-only
+comparisons retain the baseline predictors. The joint search selects the lowest
+mean validation log loss without using test scores. Exact ties favor fewer
+predictors, shallower trees, then larger leaves.
 """
 
 # ╔═╡ fc29dbcf-0459-4294-aaa2-8e6655938027
@@ -431,22 +408,16 @@ rounded_table(best_by_feature)
 md"""
 # Effects of modeling choices and selected configuration
 
-The feature-comparison table distinguishes changes associated with predictor
-selection from changes associated with complexity tuning. `FeatureGain_vsBaseline`
-compares each predictor set with the baseline at fixed settings. `TuningGain`
-reports the additional reduction in validation loss after optimizing that set's
-depth and leaf size. `TotalGain_vsBaseline` combines the two differences.
+`FeatureGain_vsBaseline` measures the reduction in validation log loss from
+changing predictors at fixed settings. `TuningGain` measures the additional
+reduction from tuning each feature set, and `TotalGain_vsBaseline` combines both.
+Positive gains are loss reductions, not accuracy percentage points.
 
-Positive gains indicate lower validation log loss, not percentage-point increases
-in accuracy. `CV_SD` summarizes variation across validation folds rather than a
-confidence interval. Out-of-fold metrics summarize predictions made for training
-observations while each was excluded from its fold model; these metrics also
-participated in configuration selection.
-
-The progression table compares the fixed baseline, feature-only selection,
-hyperparameter-only selection, and joint selection. The selected configuration is
-the best among the combinations tested by mean validation log loss; it is not
-necessarily the configuration with the highest accuracy or recall.
+The progression table compares the baseline, feature-only, tuning-only, and joint
+selections. The winner minimizes validation log loss among tested combinations,
+not necessarily classification error. `CV_SD` describes fold variation, not a
+confidence interval; out-of-fold predictions exclude each observation from its
+fold's training data but still participate in model selection.
 """
 
 # ╔═╡ 709b46d9-ed61-46db-b61e-0bfed96e821b
@@ -468,23 +439,17 @@ rounded_table(best_configuration)
 
 # ╔═╡ 77ec91d2-fc0d-4b54-a26a-dfa71b787af1
 md"""
-# Held-out prediction and performance evaluation
+# Performance evaluation
 
-After configuration selection, the fixed baseline and selected tree are fitted
-to all training observations and evaluated on the same held-out test records.
-The comparison shows whether the configuration selected through validation also
-performs better than the baseline on the test subset. Test outcomes do not alter
-the selected configuration.
+The fixed baseline and selected tree are refitted on all training records and
+evaluated on the same test records. NeedsAction is predicted at probabilities
+of at least $(round(100 * probability_cutoff; digits=1))%. Accuracy, precision,
+recall, and F1 are percentages; log loss remains on its original scale.
 
-An assessment is predicted as NeedsAction when its estimated probability is at
-least $(round(100 * probability_cutoff; digits=1))%. Accuracy, precision, recall,
-and F1 are reported as percentages, with NeedsAction treated as the positive class.
-Log loss evaluates the predicted probabilities and remains on its original scale.
-
-The reported log loss uses numerical clipping to avoid log(0); unclipped loss and
-zero-probability errors are retained in the full performance table. Precision is
-undefined when the model makes no NeedsAction predictions. The probability cutoff
-is a preliminary evaluation setting, not an established operational threshold.
+Reported log loss uses numerical clipping; raw loss and zero-probability errors
+remain in `performance`. Precision is undefined when no records are predicted
+as NeedsAction. The cutoff is a preliminary setting, not an established
+operational threshold.
 """
 
 # ╔═╡ 2a5ad38b-c3fc-47fd-bce0-98dd17621197
@@ -531,19 +496,14 @@ end;
 md"""
 # Classification errors and model interpretation
 
-The confusion matrix separates correct classifications from missed and incorrectly
-flagged assessments. Rows represent predicted categories, and columns represent
-observed categories. False negatives are NeedsAction observations predicted as
-DoNothing; false positives are DoNothing observations predicted as NeedsAction.
-These counts explain aspects of model performance that overall accuracy alone
-does not distinguish.
+The confusion matrix shows counts with predicted classes on rows and observed
+classes on columns. False negatives are missed NeedsAction assessments; false
+positives are DoNothing assessments incorrectly flagged as NeedsAction.
 
-Normalized Gini importance summarizes the contribution of each selected predictor
-to training impurity reduction. The decision-rule table complements this ranking
-by showing the complete path to each terminal leaf, its training count, and its
-estimated NeedsAction probability. The predicted category uses the same cutoff
-as the test evaluation. These outputs describe the fitted model rather than
-causal effects of the predictors on condition.
+Normalized Gini importance measures each selected predictor's contribution to
+training impurity reduction, not causal influence. The rule table reports each
+leaf's decision path, training count, probability, and classification using the
+same cutoff as test evaluation.
 """
 
 # ╔═╡ 6b7a25a1-27e7-489d-a919-28c4a2d9b539
@@ -598,41 +558,49 @@ importance_figure = bar(importance.Feature, importance.Importance;
     xlabel="Predictor", ylabel="Normalized Gini importance", xrotation=35,
     title="Selected tree — predictor importance", legend=false, figure_style...)
 
-# ╔═╡ a626b662-670a-466d-b404-65c30058f08c
+# ╔═╡ dfcaed71-dabe-4207-9980-863e35da09a6
+let
+    loss_text(x) = string(round(x; digits=6))
+    percent_text(x) = isnan(x) ? "undefined (no positive predictions)" :
+        string(round(100 * x; digits=2), "%")
+
+    test_comparison = if final_fit.test.LogLoss < baseline_fit.test.LogLoss
+        "The selected tree had lower test log loss than the fixed baseline."
+    elseif final_fit.test.LogLoss > baseline_fit.test.LogLoss
+        "The selected tree had higher test log loss than the fixed baseline."
+    else
+        "The selected tree and fixed baseline had identical test log loss."
+    end
+end
+
+# ╔═╡ 71a2e3d1-626f-4605-93c8-9c3a4b10e841
 md"""
 # Results and discussion
 
-The fixed baseline achieved a mean validation log loss of
-$(round(baseline_cv.summary.CV_LogLoss; digits=4)). At the fixed depth and leaf size,
-the best tested feature set was $(feature_winner.spec.name), with validation log
-loss of $(round(feature_winner.summary.CV_LogLoss; digits=4)). Tuning the original
-eight predictors separately produced a minimum validation log loss of
-$(round(hyper_winner.summary.CV_LogLoss; digits=4)). These comparisons distinguish
-feature-set changes from changes in tree complexity.
+Mean validation log loss was $(round(baseline_cv.summary.CV_LogLoss; digits=4))
+for the fixed baseline. The best feature-only configuration was
+$(feature_winner.spec.name), with validation log loss of
+$(round(feature_winner.summary.CV_LogLoss; digits=4)).
+Tuning the baseline predictors produced a minimum validation log loss of
+$(round(hyper_winner.summary.CV_LogLoss; digits=4)).
 
-The joint search selected $(selected_cv.spec.name), containing
-$(length(selected_cv.spec.cols)) predictors, with maximum depth
-$(selected_cv.summary.Depth) and minimum leaf size $(selected_cv.summary.MinLeaf).
-Its mean validation log loss was $(round(selected_cv.summary.CV_LogLoss; digits=4)).
-The fitted tree contained $(model_summary.ActualDepth) split levels and
-$(model_summary.Leaves) terminal leaves. The selected predictors were
+Joint selection retained $(selected_cv.spec.name), with maximum depth
+$(selected_cv.summary.Depth), minimum leaf size $(selected_cv.summary.MinLeaf),
+and validation log loss $(round(selected_cv.summary.CV_LogLoss; digits=4)).
+The fitted tree had $(model_summary.ActualDepth) split levels and
+$(model_summary.Leaves) terminal leaves. Its predictors were
 $(join(string.(selected_cv.spec.cols), ", ")).
 
-On the held-out records, log loss was
-$(round(baseline_fit.test.LogLoss; digits=4)) for the fixed baseline and
-$(round(final_fit.test.LogLoss; digits=4)) for the selected tree. At the
-$(round(100 * probability_cutoff; digits=1))% probability cutoff, the selected tree
-correctly classified $(round(100 * test_metrics.Accuracy; digits=2))% of test
-observations. NeedsAction precision was
-$(isnan(test_metrics.Precision) ? "undefined because no observations were predicted as NeedsAction" : string(round(100 * test_metrics.Precision; digits=2), "%")),
-and recall was $(round(100 * test_metrics.Recall; digits=2))%.
+Test log loss was $(round(baseline_fit.test.LogLoss; digits=4)) for the baseline
+and $(round(final_fit.test.LogLoss; digits=4)) for the selected tree. At the
+$(round(100 * probability_cutoff; digits=1))% cutoff, the selected tree achieved
+$(round(100 * test_metrics.Accuracy; digits=2))% accuracy, precision of
+$(isnan(test_metrics.Precision) ? "undefined (no positive predictions)" : string(round(100 * test_metrics.Precision; digits=2), "%")),
+and $(round(100 * test_metrics.Recall; digits=2))% recall.
 
 The model missed $(test_metrics.FN) below-threshold assessments and incorrectly
-flagged $(test_metrics.FP) assessments at or above the threshold. Precision
-summarizes the reliability of the positive classifications, whereas recall
-summarizes the proportion of below-threshold assessments identified. These
-measures should be considered alongside log loss when judging the model's
-potential usefulness for assessment planning.
+flagged $(test_metrics.FP) assessments at or above the threshold. These errors
+complement log loss when assessing usefulness for assessment planning.
 """
 
 # ╔═╡ de91e310-e274-430f-9f97-48258fde6400
@@ -2844,11 +2812,11 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 
 # ╔═╡ Cell order:
 # ╠═e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
-# ╠═154d00f9-6536-4f1a-ab29-510b54c4e303
-# ╠═55f052d6-6bfe-414c-87e3-ba99d674a8c0
+# ╟─154d00f9-6536-4f1a-ab29-510b54c4e303
+# ╟─55f052d6-6bfe-414c-87e3-ba99d674a8c0
 # ╠═b078a14b-049e-4398-9c79-85ef7fde2843
-# ╠═ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
-# ╠═5a3a0107-bed6-440a-9805-5a2b9b483b72
+# ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
+# ╟─5a3a0107-bed6-440a-9805-5a2b9b483b72
 # ╠═139075ff-92d9-480a-b53b-4bca487b100f
 # ╠═3b280832-9ad9-437c-becd-e79eb3a51e91
 # ╠═d7f18f6d-7669-402c-8814-aa0d5a7c39d2
@@ -2856,9 +2824,9 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═661416fe-494a-4057-ab7b-8b1bf6173a9e
 # ╠═d1ce4302-d470-42d2-923f-a27aa37a411e
 # ╠═774e81d0-6dd3-4ee7-b882-51abc06b2bc5
-# ╠═a90c078d-09a9-42b3-af5d-87aaa4e3de23
+# ╟─a90c078d-09a9-42b3-af5d-87aaa4e3de23
 # ╠═b605ff55-7ade-4e03-9652-126d0b2d376b
-# ╠═a7dba1b2-5d9f-47e7-bffc-e23412ab9673
+# ╟─a7dba1b2-5d9f-47e7-bffc-e23412ab9673
 # ╠═fc29dbcf-0459-4294-aaa2-8e6655938027
 # ╠═ad5ad4d4-cf9c-4883-9ade-2d517c8080f1
 # ╠═cb9ed9bf-b7be-40e4-806f-9ebdea329373
@@ -2875,7 +2843,8 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═6b7a25a1-27e7-489d-a919-28c4a2d9b539
 # ╠═7e9f8f44-560c-4655-aa48-12086f23667d
 # ╠═3885a838-00be-41c7-9804-fe7b3dd49a83
-# ╠═a626b662-670a-466d-b404-65c30058f08c
+# ╠═dfcaed71-dabe-4207-9980-863e35da09a6
+# ╠═71a2e3d1-626f-4605-93c8-9c3a4b10e841
 # ╠═de91e310-e274-430f-9f97-48258fde6400
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
