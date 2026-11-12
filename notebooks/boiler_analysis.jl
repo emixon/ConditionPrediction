@@ -666,12 +666,23 @@ interesting_plot5 = let
         yticks=(1:length(codes), codes),
         xlabel="Assessment Season",
         ylabel="Climate Code",
-        title="Not-Green Assessments by Season and Climate",
-        color=cgrad([:royalblue, :lightskyblue, :moccasin, :darkorange]),
+
+        color=cgrad([:lightblue, :lightyellow, :sandybrown]),
         clims=(0, 100),
         colorbar_title="Not green (%)",
-        yflip=true,
-        size=(1200, max(800, 65*length(codes)))
+
+        titlefontsize=16,
+        guidefontsize=14,
+        tickfontsize=13,
+        colorbar_titlefontsize=13,
+        colorbar_tickfontsize=12,
+
+        size=(850, max(380, 55 * length(codes) + 130)),
+        margin=3 * Plots.mm,
+        aspect_ratio=:auto,
+        background_color=:white,
+        grid=false,
+        yflip=true
     )
 
     for i in eachindex(codes), j in 1:4
@@ -679,10 +690,7 @@ interesting_plot5 = let
         label = n == 0 ? "No data" :
                 "$(round(rates[i, j]; digits=1))%\n(n=$n)"
 
-        text_color = n > 0 && (rates[i, j] < 30 || rates[i, j] > 75) ?
-                     :white : :black
-
-        annotate!(p, j, i, text(label, 9, text_color))
+        annotate!(p, j, i, text(label, 13, :black))
     end
 
     p
@@ -984,7 +992,7 @@ md"""
 # ╟─8eeb40e8-93cd-410b-b6d7-30fa362dca6e
 # ╟─aa888638-4879-40f8-b7be-9b7d961d0f21
 # ╟─59fb2405-2cbe-4979-beb7-cbf24b907687
-# ╟─8cb1f1b2-e752-4110-8ed9-17c5b0eefdf2
+# ╠═8cb1f1b2-e752-4110-8ed9-17c5b0eefdf2
 # ╟─aa974399-dc5f-4858-97e1-d15dc3f44ce8
 # ╠═986775ce-5341-4597-9c3d-20fe0f785b58
 # ╟─00156390-9033-438e-ab74-b9393ef9b1cf
