@@ -510,13 +510,26 @@ same cutoff as test evaluation.
 confusion_figure = let
     m = test_metrics
     counts = [m.TN m.FN; m.FP m.TP]
-    p = heatmap(1:2, 1:2, counts; xticks=(1:2, classes), yticks=(1:2, classes),
-        yflip=true, xlabel="Actual class", ylabel="Predicted class", color=:Blues,
-        colorbar_title="Count", title="Selected tree — test confusion matrix", figure_style...)
+
+    style = merge(figure_style, (right_margin=25mm,))
+
+    p = heatmap(
+        1:2, 1:2, counts;
+        xticks=(1:2, classes),
+        yticks=(1:2, classes),
+        yflip=true,
+        xlabel="Actual class",
+        ylabel="Predicted class",
+        color=:Blues,
+        colorbar_title="\u200B\nCount",
+        title="Confusion matrix",
+        style...,
+    )
     for row in 1:2, col in 1:2
         ink = counts[row, col] > maximum(counts)/2 ? :white : :black
         annotate!(p, col, row, text(string(counts[row, col]), 22, ink))
     end
+
     p
 end
 
