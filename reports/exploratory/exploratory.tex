@@ -481,7 +481,7 @@ where $y$ is a vector of the observed dependent variable values (in this case, S
 
 Additionally, OLS regression minimizes the squared $L_2$ norm. The objective function for ordinary least squares regression is given as 
 \[
-\hat{\beta_{OLS}} = \underset{\beta}{\operatorname{argmin}} \lVert y - X\beta \rVert_2^2
+\hat{\beta}_{\text{OLS}} = \underset{\beta}{\operatorname{argmin}} \lVert y - X\beta \rVert_2^2
 \]
 where $\hat{\beta}$ is a vector of the estimated regression coefficients $\beta$.
 
@@ -577,23 +577,9 @@ Model & Dataset & Accuracy \\
 
 \begin{figure}
 \centering
-\includegraphics[width=.8\linewidth]{ols_residuals_hist.png}
-\caption{Histogram of Residuals from the OLS Regression Model}
-\label{fig:ols_residuals_hist}
-\end{figure}
-
-\begin{figure}
-\centering
 \includegraphics[width=.8\linewidth]{ridge_performance.png}
 \caption{Predictive Performance of the Ridge Regression Model}
 \label{fig:ridge_performance}
-\end{figure}
-
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{ridge_residuals_hist.png}
-\caption{Histogram of Residuals from the Ridge Regression Model}
-\label{fig:ridge_residuals_hist}
 \end{figure}
 
 \begin{figure}
