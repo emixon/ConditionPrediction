@@ -1015,6 +1015,25 @@ begin
 savefig("log_prob_sep_hist.png")
 end
 
+# ╔═╡ b7f85f88-1f37-4e8a-b65f-c42ffd2f8a1d
+begin
+    fp = fitted_params(mach_logistic)
+
+    coefs = fp.probabilistic_tuned_model.best_fitted_params.coefs
+
+    intercept = fp.probabilistic_tuned_model.best_fitted_params.intercept
+
+    lambda =
+        report(mach_logistic).probabilistic_tuned_model.best_history_entry.model.lambda
+
+    logistic_df = DataFrame(
+        Parameter = vcat(["λ", "Intercept"], feature_cols),
+        Logistic = vcat([lambda], [intercept], coefs)
+    )
+
+    logistic_df
+end
+
 # ╔═╡ 3cde7233-438d-4cb4-aeac-ef6cadb7e22d
 # ╠═╡ disabled = true
 #=╠═╡
@@ -4328,6 +4347,7 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═f341be50-37f9-45b2-9597-0db46997e6a7
 # ╠═316d58ec-0d6d-4e89-ad52-bf90693437fb
 # ╠═e47deada-667c-42d6-b7f6-3667bb33fd00
+# ╠═b7f85f88-1f37-4e8a-b65f-c42ffd2f8a1d
 # ╟─3cde7233-438d-4cb4-aeac-ef6cadb7e22d
 # ╟─49ba444f-c820-469b-98e3-8d11f61b5229
 # ╟─d3b4eed4-e5f1-4cdf-b8ca-88c66c9edb43

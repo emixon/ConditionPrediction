@@ -480,9 +480,26 @@ The relevant types of machine learning models that will be tested and cross vali
 
 \subsection{Regression Modeling}
 
+OLS regression:
 $y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \dots + \beta_p x_p + \epsilon$
 
-$\min_{\beta} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2$
+where $y$ is a vector of the observed dependent variable values (in this case, Score), $\beta$ is a vector of coefficients, $x_p$ are dependent variables, and $\epsilon$ is a random error term.
+
+The objective function for ordinary least squares regression is:
+
+$\hat{\beta} = \underset{\beta}{\operatorname{argmin}} \lVert y - X\beta \rVert_2^2$
+
+Ridge Regression: adds $L_2$ regularization term to OLS objective function
+
+$\hat{\beta}_{\text{Ridge}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_2^2 \right)$
+
+Lasso regression: adds $L_1$ regularization term to OLS objective funnction
+
+$\hat{\beta}_{\text{Lasso}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_1 \right)$
+
+
+
+
 
 \begin{table}[htbp]
 \centering 
@@ -514,8 +531,8 @@ Model & Dataset & $R^2$ & MAE & RMSE \\
 & \multicolumn{3}{c}{Model Coefficients} \\
 \cmidrule(lr){2-4}
 Feature & OLS & Ridge & Lasso \\
-$\lambda$ & -- & 0.0162378 & 0.00127427 \\
 \midrule
+$\lambda$ & -- & 0.0162378 & 0.00127427 \\
 RSL & 3.50085 & 3.3656 & 3.5687 \\
 PredictedCI & 2.51449 & 2.5951 & 2.44886 \\
 PrevAssessed & -0.893353 & -0.916602 & -0.872356 \\
@@ -527,6 +544,27 @@ Climate & -0.305429 & -0.298896 & -0.306704 \\
 \bottomrule
 \end{tabular}
 \label{tab:coefficient_comparison}
+\end{table}
+
+\begin{table}[htbp]
+\centering 
+\caption{Comparison of OLS, Ridge, and Lasso regression model accuracy on training and test datasets.} 
+\begin{tabular}{llccc}
+\hline
+Model & Dataset & Accuracy \\
+\hline
+\multirow{2}{*}{OLS}
+& Train & $66.017\%$ \\
+& Test & $66.141\%$ \\
+\multirow{2}{*}{Ridge}
+& Train & $66.017\%$ \\
+& Test & $66.141\%$ \\
+\multirow{2}{*}{Lasso}
+& Train & $66.017\%$ \\
+& Test & $66.141\%$ \\
+\hline
+\end{tabular}
+\label{tab:performance_comparison}
 \end{table}
 
 \begin{figure}
