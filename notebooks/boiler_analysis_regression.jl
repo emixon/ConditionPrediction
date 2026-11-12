@@ -37,46 +37,11 @@ This will load the dataset and filters the data of interest, saving to a datafra
 It also defines a helper function called getHistAll that plots 12 basic histograms of the data set.
 """
 
-# ╔═╡ af5b14a9-9e5b-42d4-bc68-abf314fc3928
-begin
-    path = joinpath( @__DIR__, "..", "data", "boilers.csv")
-    MEC_Name = "Boilers"
-    MEC = 1
-    df = load_data(path)
-    boilers = df[df. MEC .== MEC, :]
-    function getHistAll(d)
-        plot(
-            histogram(d.NormalizedAge; bins=100, title="$MEC_Name Normalized Age"),
-            histogram(d.PredictedCI;  bins=100, title="$MEC_Name Predicted CI"),
-            histogram(d.Score;  bins=100, title="$MEC_Name Assessed Score"),
-            histogram(d.Recency;      bins=100, title="$MEC_Name Recency"),
-            histogram(d.Spec, title="$MEC_Name Specification"),
-            histogram(d.DesignLife, title="$MEC_Name Design Life"),
-            histogram(d.Qty, title="$MEC_Name Quantity"),
-            histogram(d.EffectiveAge; bins=100, title="$MEC_Name Effective Age"),
-            histogram(d.RSL; bins=100, title="$MEC_Name Remaining Service Life"),
-            histogram(d.CRV; bins=100, title="$MEC_Name Component Replacement Value"),
-            histogram(d.Fac, title="$MEC_Name Facility Code"),
-            histogram(d.AssetAge, title="$MEC_Name Asset Age"),
-            histogram(d.Month, bins=12, title="$MEC_Name Month of Assessment"),
-            histogram(d.Year, title="$MEC_Name Year of Assessment"),
-            histogram(d.Climate, title="$MEC_Name Climate"),
-            histogram(d.AssetDesignLife, title="$MEC_Name Asset Design Life"),
-            layout=(4, 4), size=(2400, 1800)
-        )
-    end
-
-    getHistAll(boilers)
-end
-
 # ╔═╡ 5ca1e039-ee02-4467-95e0-8f44cb4995db
 md"""
 ### Describe The Boilers Data Frame
 Shows the initially available columns and types as well as basic stats.
 """
-
-# ╔═╡ 9371dd2a-8673-4104-b04b-4d91a597427a
-describe(boilers, :all)
 
 # ╔═╡ 43ee48fd-370d-412e-968f-3df0c2b7c422
 md"""
@@ -94,9 +59,6 @@ md"""
 With the dataset filtered on MEC 171 (Boilers), we will only have one value in all observations for the :MEC, :System, and :UOM properties.  Those columns effectively carry no information and can be ommitted from PCA.
 """
 
-# ╔═╡ 8e86278f-bbec-4f50-8961-41a45bf2aa94
-select!(boilers, Not([:MEC, :System, :UOM]))
-
 # ╔═╡ 745d02a7-6b60-47d3-973c-0f428013c265
 md"""
 ### Addressing observations with missing data
@@ -107,28 +69,17 @@ Once the new :PrevAssessed column is created, we will replace "missing" values w
 For the missing Climate data, we will simply replace "missing" values with the mean for available data prior to PCA.
 """
 
-# ╔═╡ b078a14b-049e-4398-9c79-85ef7fde2843
-begin
-	boilers_raw_data = boilers
-	boilers.PrevAssessed = Int.(.!ismissing.(boilers.PrevScore))
-	
-	mean_PrevScore = mean(skipmissing(boilers.PrevScore))
-	mean_Recency = mean(skipmissing(boilers.Recency))
-	mean_Climate = mean(skipmissing(boilers.Climate))
-	
-	boilers.PrevScore = coalesce.(boilers.PrevScore, mean_PrevScore)
-	boilers.Recency = coalesce.(boilers.Recency, mean_Recency)
-	boilers.Climate = coalesce.(boilers.Climate, mean_Climate)
-
-	# New Boilers df
-	boilers
-end
-
 # ╔═╡ 78c6cc72-5658-495d-9444-cfa4b4bc582a
 md"""
 ### The \$1,000,000 boiler
 The CRV column values notably cover a range several orders of magnitude more than the rest of our values. When doing a PCA analysis, this will cause CRV to dominate the first component due simply to its numerical scale. The typical recommended action to take in this case is to utilize a log scale for such a datatype when doing PCA. So we will add a LogCRV column to our boilers dataframe for this reason. As shown by the plot below, this also makes our CRV data more symmetric and lowers the influence of the drastically more expensive outliers.
 """
+
+# ╔═╡ 9371dd2a-8673-4104-b04b-4d91a597427a
+describe(boilers, :all)
+
+# ╔═╡ 8e86278f-bbec-4f50-8961-41a45bf2aa94
+select!(boilers, Not([:MEC, :System, :UOM]))
 
 # ╔═╡ 64dbadfb-21b1-4ecd-b157-efd6f3a96983
 begin
@@ -155,86 +106,6 @@ The data wrangling process took care of most of the data cleanup and reshaping f
 
 Additionally, while we addressed CRV's order of magnitude, there are still a wide numerical range of units.  To ensure values with larger numerical scales (like :AssetAge) don't dominate the analysis, in addition to centering the data by subtracting the mean of each attribute, we also standardize by dividing each centered attribute by its standard deviation.
 """
-
-# ╔═╡ 03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
-begin
-    # The Columns we want to use for the PCA
-    pca_vars = [
-        :NormalizedAge,
-        :EffectiveAge,
-        :RSL,
-        :Recency,
-        :PrevScore,
-        :PrevAssessed,
-        :PredictedCI,
-        :Qty,
-        :AssetAge,
-        :AssetDesignLife,
-        :LogCRV,
-        :Year,
-        :Month,
-        :Climate
-    ]
-
-    X = Matrix(select(boilers, pca_vars))' # Select columns, convert to matrix, and transform
-    
-    X̄ = mean(X, dims=2) # Get the Mean
-    σ = std(X, dims=2) # Get the Standard Deviation
-
-    Z = (X .- X̄) ./ σ # Normalize AND Standardize
-
-    F = svd(Z) # Get the SVD
-
-    explained_variance = F.S .^ 2 ./ (size(Z, 2) - 1)
-    explained_ratio = explained_variance ./ sum(explained_variance)
-    cumulative_ratio = cumsum(explained_ratio)
-
-    DataFrame(
-        PC = 1:length(F.S),
-        ExplainedVariance = explained_variance,
-        ExplainedRatio = explained_ratio,
-        CumulativeRatio = cumulative_ratio,
-    )
-end
-
-# ╔═╡ a4346d81-ccfe-4376-9cc6-27973e80c095
-begin
-    modes = 11
-    plot(
-        1:modes,
-        explained_ratio[1:modes] .* 100;
-        marker = :circle,
-        xlabel = "Principal Component",
-        ylabel = "Explained Variance (%)",
-        title = "Boiler PCA Plot",
-        legend = false,
-    )
-end
-
-# ╔═╡ e417d3b5-d72d-43d5-8662-ad3eefce447d
-begin
-    loadings = DataFrame(
-        Variable = string.(pca_vars),
-        PC1 = F.U[:, 1],
-        PC2 = F.U[:, 2],
-        PC3 = F.U[:, 3],
-        PC4 = F.U[:, 4],
-        PC5 = F.U[:, 5],
-        PC6 = F.U[:, 6],
-        PC7 = F.U[:, 7],
-        PC8 = F.U[:, 8],
-        PC9 = F.U[:, 9],
-        PC10 = F.U[:, 10],
-        PC11 = F.U[:, 11],
-        PC12 = F.U[:, 12],
-        PC13 = F.U[:, 13],
-        PC14 = F.U[:, 14],
-    )
-
-    sort!(loadings, :PC1, by=abs, rev=true)
-
-    loadings
-end
 
 # ╔═╡ 4daad98c-f8a2-4430-946e-8efd6189a008
 md"""
@@ -310,48 +181,6 @@ function GetLoadings(F, pca_vars; sort_by = :PC1)
     return loadings
 end
 
-# ╔═╡ 653ae9d0-bca6-4778-a8d3-9d07dbf143c2
-function GetLoadingsHeatMap(F, pca_variables; squared=false)
-	k = size(F.U, 2)
-    L = F.U[:, 1:k]
-
-    limit = maximum(abs, L)
-
-    heatmap(
-        1:k,
-        string.(pca_variables),
-        (squared ? L .^ 2 : L);
-        xlabel = "Principal Component",
-        ylabel = "Variable",
-        title = "PCA Loading Heatmap",
-        colorbar_title = "Loading",
-        clims = (squared ? (0, limit) : (-limit, limit)),
-        c = (squared ? :viridis : :RdBu),
-        yflip = true,
-    )
-end
-
-# ╔═╡ af1af019-a784-4144-a632-e66fca8b1c3b
-let
-    # Repeat the PCA with only one condition/lifecycle representative (arbitrarily choosing RSL, we could also try others)
-    pca_vars_single_lf = [
-        :RSL,
-        :Recency,
-        :PrevScore,
-        :PrevAssessed,
-        :Qty,
-        :AssetAge,
-        :AssetDesignLife,
-        :LogCRV,
-        :Month,
-        :Year,
-        :Climate
-    ]
-    F, results, explained_variance, explained_ratio = CalcSVDAndExplainedVariance(pca_vars_single_lf, boilers)
-
-    results, GetPCAPlot(8, explained_ratio), GetLoadings(F, pca_vars_single_lf), GetLoadingsHeatMap(F, pca_vars_single_lf, squared=true)
-end
-
 # ╔═╡ 2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 md"""
 ## Pairwise Correlation Analysis
@@ -366,67 +195,6 @@ md"""
 md"""
 The Pearson correlation coefficient is the measure of the direction and strength of the linear relationship between two variables.
 """
-
-# ╔═╡ d832c11a-a8b3-4f92-9a30-caccc1d6b28e
-begin
-
-	# The Columns we want to use for the correlation analysis
-    cor_vars = [
-        :NormalizedAge,
-        :EffectiveAge,
-        :RSL,
-        :Recency,
-        :PrevScore,
-        :PrevAssessed,
-        :PredictedCI,
-        :Score,
-        :Qty,
-        :AssetAge,
-        :AssetDesignLife,
-        :LogCRV,
-        :Month,
-        :Year,
-        :Climate
-    ]
-    
-	# create matrix for Pearson correlation
-	boilers_cor = Matrix(select(boilers_raw_data, cor_vars))
-	
-    # calculate Spearman correlation coefficients
-    pearson_matrix = cor(boilers_cor)
-end
-
-# ╔═╡ c971b211-e043-47b3-88b7-ad73b6872796
-begin
-	# CREATE HEATMAP
-
-	# create data labels
-	
-	pearson_labels = [
-		"NormalizedAge",
-        "EffectiveAge",
-        "RSL",
-        "Recency",
-        "PrevScore",
-        "PrevAssessed",
-        "PredictedCI",
-        "Score",
-        "Qty",
-        "AssetAge",
-        "AssetDesignLife",
-        "LogCRV",
-        "Month",
-        "Year",
-        "Climate"
-	]
-
-	# create mask to hide redundant values
-	pearson_matrix_masked = copy(pearson_matrix)
-	pearson_matrix_masked[triu!(trues(size(pearson_matrix_masked)), 1)] .= NaN
-	
-	# plot heatmap
-	heatmap(pearson_labels, pearson_labels, pearson_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, title = "Pearson Corrrelation Heatmap", yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm)
-end
 
 # ╔═╡ b9c194d6-87fe-459e-82f6-e551d4889747
 md"""
@@ -443,160 +211,6 @@ In contrast, the relative strength of pairwise correlations with the Score varia
 
 """
 
-# ╔═╡ 5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
-begin
-	# create matrix for correlation
-	boilers_spearman = Matrix(select(boilers_raw_data, cor_vars))
-	# calculate Spearman correlation coefficients
-    spearman_matrix = corspearman(boilers_cor)
-end
-
-# ╔═╡ 13da6ec4-3d14-4d57-aafc-647623e0cc37
-begin
-	# CREATE HEATMAP
-
-	# create data labels
-	
-	spearman_labels = [
-		"NormalizedAge",
-        "EffectiveAge",
-        "RSL",
-        "Recency",
-        "PrevScore",
-        "PrevAssessed",
-        "PredictedCI",
-        "Score",
-        "Qty",
-        "AssetAge",
-        "AssetDesignLife",
-        "LogCRV",
-        "Month",
-        "Year",
-        "Climate"
-	]
-
-	# create mask to hide redundant values
-	spearman_matrix_masked = copy(spearman_matrix)
-	spearman_matrix_masked[triu!(trues(size(spearman_matrix_masked)), 1)] .= NaN
-	
-	# plot heatmap
-	heatmap(spearman_labels, spearman_labels, spearman_matrix_masked, xrotation = 45, clim = (-1,1), c = :bwr, yflip = true, aspect_ratio = :equal, right_margin = 20Plots.mm, left_margin = 20Plots.mm,  size = (1600, 1600), dpi = 200, tickfontsize = 24, bottom_margin = 20mm, top_margin = 10mm)
-
-
-    savefig("spearman_heatmap")
-end
-
-# ╔═╡ 3f0bb0f0-29ae-4e19-a6c1-dbb881074367
-begin
-    # create data labels	
-
-    
-    # matrix dimensions
-   num_rows, num_columns = size(boilers_cor)
-
-     #get ranked data
-    boilers_ranked = zeros(num_rows, num_columns)
-    for col in 1:num_columns
-        boilers_ranked[:, col] = tiedrank(boilers_cor[:,col])
-    end
-
-    # empty matrices for output
-    rho_matrix = zeros(num_columns, num_columns)
-    p_matrix = zeros(num_columns, num_columns)
-
-    # get Spearman correlation coefficients and p-values
-    for i in 1:num_columns
-        for j in 1:num_columns
-            if i == j
-                rho_matrix[i,j] = 1.0
-                p_matrix[i, j] = 0.0
-            elseif i<j
-                # Spearman correlation test
-                test_result = CorrelationTest(boilers_ranked[:,i], boilers_ranked[:,j])
-
-                # correlation coefficient and p-value
-                rho_matrix[i,j] = test_result.r
-                p_matrix[i,j] = pvalue(test_result)
-
-                # mirror results
-                rho_matrix[j,i] = rho_matrix[i,j]
-                p_matrix[j,i] = p_matrix[i,j]
-            end
-        end
-    end
-
-    # create mask to hide redundant values
-	rho_matrix_masked = copy(rho_matrix)
-	rho_matrix_masked[triu!(trues(size(rho_matrix_masked)), 1)] .= NaN
-
-    # get annotations for each cell
-    num_rows, num_columns = size(boilers_cor)
-    annotations = []
-    for i in 1:num_columns
-        for j in 1:num_columns
-
-            if j < i
-                continue
-            end
-            rho_val = round(rho_matrix[i, j], digits=2)
-            p_val = p_matrix[i,j]
-            sig = if p_val < 0.001
-                "***"
-            elseif p_val < 0.01
-                "**"
-            elseif p_val < 0.05
-                "*"
-            else
-                ""
-            end
-            
-            cell_text = "$rho_val\n$sig"
-            text_color = abs(rho_val) < 0.4 ? :black : :white
-            push!(annotations, (i, j, text(cell_text, 10, :center, text_color)))
-        end
-    end
-end
-
-
-            
-
-# ╔═╡ 5eb540bd-b9b8-4a0f-a902-91199da3bee5
-begin
-# plot heatmap
-	plt = heatmap(
-        1:num_columns,
-        1:num_columns,
-        rho_matrix_masked,
-        xticks = (1:num_columns, spearman_labels), 
-        yticks = (1:num_columns, spearman_labels), 
-        xrotation = 45,
-        clim = (-1,1),
-        c = :bwr, 
-        #title = "Spearman Correlation Heatmap",
-        yflip = true,
-        annotate = annotations,
-        aspect_ratio = :equal,
-        lims = :round,
-        grid = false,
-        #right_margin = 20Plots.mm,
-        #left_margin = 20Plots.mm,
-        #size = (1000,850)
-        size = (1600, 1600),
-        dpi = 200,
-       #titlefontsize = 40,
-        tickfontsize = 24,
-        left_margin = 18mm,
-        bottom_margin = 20mm,
-        top_margin = 10mm,
-        right_margin = 10mm,
-    )
-
-    grid_range = 0.5:(num_columns + 0.5)
-    vline!(plt, grid_range, color = :gray, alpha = 0.6, linewidth = 0.5, label = false)
-    hline!(plt, grid_range, color = :gray, alpha = 0.6, linewidth = 0.5, label = false)
-    plot!(plt, framestyle = :box)
-end
-
 # ╔═╡ eede658f-b6d3-47be-a5e3-c1a6873897c9
 
 
@@ -611,40 +225,6 @@ end
 
 # ╔═╡ 5d193b87-fc5c-479e-9793-652a27034297
 
-
-# ╔═╡ 094638dd-6bc0-4d5e-a448-58e9fb71d3a0
-boilers_cor
-
-# ╔═╡ 8b747149-5618-4df9-8592-565744551f94
-begin
-    # get dataframe of raw data and convert all columns to float64 data type
-    df_cor = select(boilers_raw_data, cor_vars)
-    for col in names(df_cor)
-        df_cor[!, col] = float.(df_cor[!, col])
-    end
-end
-
-# ╔═╡ 1d28836f-4010-470d-9729-b44e3f858910
-df_cor
-
-# ╔═╡ f94307e2-63bb-4268-97d1-f13f48154150
-vcorrplot = @df df_cor corrplot([:NormalizedAge :EffectiveAge :RSL :Recency :PrevScore :PrevAssessed :PredictedCI :Score :Qty :AssetAge :AssetDesignLife :LogCRV :Month :Year :Climate], size = (5000, 5000), guidefontsize=11, tickfontsize=10,
-        margin=25Plots.mm, left_margin=25Plots.mm, bottom_margin=25Plots.mm)
-
-# ╔═╡ 4b87187a-8931-4322-8dbb-5a4a362b5711
-# ╠═╡ disabled = true
-#=╠═╡
-begin
-    cols = [:NormalizedAge, :EffectiveAge, :RSL, :Recency, :PrevScore, 
-            :PrevAssessed, :PredictedCI, :Qty, :AssetAge, :AssetDesignLife, 
-            :LogCRV, :Month, :Year, :Climate, :Score]
-    
-    for col in cols
-        println(col, " => ", eltype(df_cor[!, col]))
-    end
-    
-end
-  ╠═╡ =#
 
 # ╔═╡ cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
 md"""
@@ -666,21 +246,9 @@ md"""
 Tutorial source: https://juliaai.github.io/DataScienceTutorials.jl/isl/lab-3/
 """
 
-# ╔═╡ d92cc684-54ec-451a-bbee-080cbd997247
-# code snippet from: https://discourse.julialang.org/t/simple-tool-for-train-test-split/473/3
-
-function partitionTrainTest(data, at = 0.8)
-    n = nrow(data)
-    idx = shuffle(1:n)
-    train_idx = view(idx, 1:floor(Int, at*n))
-    test_idx = view(idx, (floor(Int, at*n)+1):n)
-    data[train_idx,:], data[test_idx,:]
-end
-
-# ╔═╡ 048bf2a8-49f6-4e8b-929b-eb75b0efee69
+# ╔═╡ 70dbe789-5de5-40af-a68e-bad94f1ae81f
 begin   
-    reg_vars = [
-            :Score,
+    ind_vars = [
             :RSL,
             :Recency,
             :PrevScore,
@@ -692,14 +260,31 @@ begin
             :Month,
             :Year,
             :Climate
-        ]
-
-    df_reg = select(boilers, reg_vars)
-    df_reg = mapcols(col -> Float64.(col), df_reg)
-    df_train, df_test = partitionTrainTest(df_reg, 0.8)
-
+        ] 
+    X = mapcols(col -> Float64.(col), select(boilers, ind_vars))
+    y = Float64.(boilers.Score)
     
 end
+
+# ╔═╡ 2648a32b-0064-4e3b-8ac7-178c86c4b22d
+begin
+    # use partition to create train and test datasets
+    train_rows, test_rows = partition(
+        eachindex(y), # just says to use all rows
+        0.80; # 80/20 split between train and test
+        stratify = y, # keeps a region proportions similar between train and test
+        rng = 1234, # makes this repeatable
+    )
+end
+
+# ╔═╡ 610dbf1a-cc43-41dd-a1df-8d0aea4b8e02
+
+
+# ╔═╡ 6f3b0e0c-4487-471e-b696-ae0873b7ebb8
+
+
+# ╔═╡ 5a8756c2-723e-4326-aa05-0bf6893ca7ea
+
 
 # ╔═╡ 8a6286e9-7b53-43f6-8e6e-0496ac24eea4
 begin
@@ -718,6 +303,24 @@ begin
     
     X_test = select(df_test, Not(:Score))
     y_test = df_test.Score
+end
+
+# ╔═╡ 528714e7-ebc2-4f9f-8c3e-a62a888793a6
+begin
+    inputFeatures = length(feature_cols)
+
+    ols = LinearRegressor(
+        fit_intercept = true,
+    )
+
+    pipeline_ols = Standardizer() |> ols
+
+    mach_ols = machine(pipeline_ols, X_train, y_train)
+
+    fit!(mach_ols)
+
+    predictions = predict(mach_ols, X_test)
+
 end
 
 # ╔═╡ 17cfa049-0fee-49a0-b836-c8891bfd8a3d
@@ -838,6 +441,26 @@ end
 # ╔═╡ 439da894-e094-498e-b1b2-0dc31f42bef8
 histogram(res_ridge, normalize=true, size=(800,600), label="residual")
 
+# ╔═╡ 04520bb6-c623-4e75-acd9-b765c213c144
+y_cat = categorical(y_train .> 85)
+
+# ╔═╡ 8c11abd9-8fff-4aa3-b1bb-e0b983fd0c97
+begin
+	# logistic classifier 
+	
+	# Load the LogisticClassifier model
+	LogisticClassifier = @load LogisticClassifier pkg=MLJLinearModels
+	
+	# Example data: X (features table or matrix), y (categorical/binary vector)
+	model_logistic = LogisticClassifier()
+	mach_logistic = machine(model_logistic, X_train, y_cat)
+	fit!(mach_logistic)
+	
+end
+
+# ╔═╡ 830d1d3a-c8b6-4ff5-9783-6d3902a9645d
+
+
 # ╔═╡ c2324815-aa18-43a0-b9f3-cd7dbcde5647
 md"""
 ## Decision Tree (XGBoost) Predictive Model
@@ -850,6 +473,117 @@ md"""
 md"""
 ## Quantile Distribution Model
 """
+
+# ╔═╡ af5b14a9-9e5b-42d4-bc68-abf314fc3928
+begin
+    path = joinpath( @__DIR__, "..", "data", "boilers.csv")
+    MEC_Name = "Boilers"
+    MEC = 1
+    df = load_data(path)
+    boilers = df[df. MEC .== MEC, :]
+    function getHistAll(d)
+        plot(
+            histogram(d.NormalizedAge; bins=100, title="$MEC_Name Normalized Age"),
+            histogram(d.PredictedCI;  bins=100, title="$MEC_Name Predicted CI"),
+            histogram(d.Score;  bins=100, title="$MEC_Name Assessed Score"),
+            histogram(d.Recency;      bins=100, title="$MEC_Name Recency"),
+            histogram(d.Spec, title="$MEC_Name Specification"),
+            histogram(d.DesignLife, title="$MEC_Name Design Life"),
+            histogram(d.Qty, title="$MEC_Name Quantity"),
+            histogram(d.EffectiveAge; bins=100, title="$MEC_Name Effective Age"),
+            histogram(d.RSL; bins=100, title="$MEC_Name Remaining Service Life"),
+            histogram(d.CRV; bins=100, title="$MEC_Name Component Replacement Value"),
+            histogram(d.Fac, title="$MEC_Name Facility Code"),
+            histogram(d.AssetAge, title="$MEC_Name Asset Age"),
+            histogram(d.Month, bins=12, title="$MEC_Name Month of Assessment"),
+            histogram(d.Year, title="$MEC_Name Year of Assessment"),
+            histogram(d.Climate, title="$MEC_Name Climate"),
+            histogram(d.AssetDesignLife, title="$MEC_Name Asset Design Life"),
+            layout=(4, 4), size=(2400, 1800)
+        )
+    end
+
+    getHistAll(boilers)
+end
+
+# ╔═╡ ee264170-dcc6-4d27-af75-144fecda5cdc
+begin
+	path = joinpath( @__DIR__, "..", "data", "boilers.csv")
+    MEC_Name = "Boilers"
+    MEC = 1
+    df = CSV.read(path, DataFrame)
+    boilers = df[df. MEC .== MEC, :]
+	select!(boilers, Not([:MEC, :System, :UOM]))
+	wrangled_boilers = copy(boilers)
+	wrangled_boilers.PrevAssessed = Int.(.!ismissing.(wrangled_boilers.PrevScore))
+	
+	mean_PrevScore = mean(skipmissing(wrangled_boilers.PrevScore))
+	mean_Recency = mean(skipmissing(wrangled_boilers.Recency))
+	mean_Climate = mean(skipmissing(wrangled_boilers.Climate))
+	
+	wrangled_boilers.PrevScore = coalesce.(wrangled_boilers.PrevScore, mean_PrevScore)
+	wrangled_boilers.Recency = coalesce.(wrangled_boilers.Recency, mean_Recency)
+	wrangled_boilers.Climate = coalesce.(wrangled_boilers.Climate, mean_Climate)
+	wrangled_boilers.NormalizedAssetAge = wrangled_boilers.AssetAge ./ wrangled_boilers.AssetDesignLife
+
+	month_angle = 2π .* (wrangled_boilers.Month .- 1) ./ 12
+
+	# Addressses cyclical nature of months (keeping december near january)
+    wrangled_boilers.MonthSin = sin.(month_angle)
+    wrangled_boilers.MonthCos = cos.(month_angle)
+
+	transform!(
+	    groupby(wrangled_boilers, :Fac), 
+	    :Score => (x -> 100 * sum(x .>= 88) / length(x)) => :PercentGreen
+	)
+
+	# One-hot encode nominal identifier fields
+    function add_indicator_columns!(df, source_col; prefix = String(source_col))
+        levels = sort(collect(skipmissing(unique(df[!, source_col]))))
+        new_columns = Symbol[]
+
+        for level in levels
+            new_col = Symbol("$(prefix)_$(level)")
+            df[!, new_col] = Int8.(coalesce.(df[!, source_col] .== level, false))
+            push!(new_columns, new_col)
+        end
+
+        return new_columns
+    end
+
+    spec_indicator_cols = add_indicator_columns!(
+        wrangled_boilers,
+        :Spec;
+        prefix = "Spec",
+    )
+
+    fac_indicator_cols = add_indicator_columns!(
+        wrangled_boilers,
+        :Fac;
+        prefix = "Fac",
+    )
+
+	wrangled_boilers.LogCRV = log1p.(wrangled_boilers.CRV)
+	# New Boilers df
+	wrangled_boilers
+end
+
+# ╔═╡ b078a14b-049e-4398-9c79-85ef7fde2843
+begin
+	boilers_raw_data = boilers
+	boilers.PrevAssessed = Int.(.!ismissing.(boilers.PrevScore))
+	
+	mean_PrevScore = mean(skipmissing(boilers.PrevScore))
+	mean_Recency = mean(skipmissing(boilers.Recency))
+	mean_Climate = mean(skipmissing(boilers.Climate))
+	
+	boilers.PrevScore = coalesce.(boilers.PrevScore, mean_PrevScore)
+	boilers.Recency = coalesce.(boilers.Recency, mean_Recency)
+	boilers.Climate = coalesce.(boilers.Climate, mean_Climate)
+
+	# New Boilers df
+	boilers
+end
 
 # ╔═╡ Cell order:
 # ╠═e4bed79a-ac9a-11f1-85c1-f7561a0ee5b3
@@ -866,44 +600,33 @@ md"""
 # ╠═b078a14b-049e-4398-9c79-85ef7fde2843
 # ╟─78c6cc72-5658-495d-9444-cfa4b4bc582a
 # ╠═64dbadfb-21b1-4ecd-b157-efd6f3a96983
+# ╠═ee264170-dcc6-4d27-af75-144fecda5cdc
 # ╟─b62c7f0d-f9e8-41b6-9eb6-e77f55345806
 # ╟─b23788a2-2890-4417-bb00-9ebd4565b449
-# ╠═03d7f9cc-89ac-4521-8e9e-0ddcf6a8ba9c
-# ╟─a4346d81-ccfe-4376-9cc6-27973e80c095
-# ╠═e417d3b5-d72d-43d5-8662-ad3eefce447d
 # ╟─4daad98c-f8a2-4430-946e-8efd6189a008
 # ╟─ef2fb0da-9db3-48bc-a92d-a07e24a6c6a1
 # ╟─0bf742cc-4661-4a33-bee0-4905860d2562
 # ╟─e39f1b09-9bce-40d5-b5d9-03946bffe6fe
-# ╠═653ae9d0-bca6-4778-a8d3-9d07dbf143c2
-# ╠═af1af019-a784-4144-a632-e66fca8b1c3b
 # ╟─2a9579fc-6ec0-4741-859a-6c9105dc8f7d
 # ╟─90916ca7-d937-4a85-b40d-a69c23e38562
 # ╟─acde71bb-e5e0-4ff2-b655-ffcb1d9c74fd
-# ╠═d832c11a-a8b3-4f92-9a30-caccc1d6b28e
-# ╠═c971b211-e043-47b3-88b7-ad73b6872796
 # ╟─b9c194d6-87fe-459e-82f6-e551d4889747
 # ╟─09771c81-3e9c-42ea-be1a-e389f0bcd906
-# ╠═5dc1a1ca-22ae-4cca-9d52-a83b71e2535c
-# ╠═13da6ec4-3d14-4d57-aafc-647623e0cc37
-# ╠═3f0bb0f0-29ae-4e19-a6c1-dbb881074367
-# ╠═5eb540bd-b9b8-4a0f-a902-91199da3bee5
 # ╠═eede658f-b6d3-47be-a5e3-c1a6873897c9
 # ╠═49bec9d7-c299-473b-ac89-bb23d36355ac
 # ╠═a8df4899-9178-4b98-8183-056810119467
 # ╠═50bbe087-de89-429f-8fae-77919773861e
 # ╠═5d193b87-fc5c-479e-9793-652a27034297
-# ╠═094638dd-6bc0-4d5e-a448-58e9fb71d3a0
-# ╠═8b747149-5618-4df9-8592-565744551f94
-# ╠═1d28836f-4010-470d-9729-b44e3f858910
-# ╠═f94307e2-63bb-4268-97d1-f13f48154150
-# ╠═4b87187a-8931-4322-8dbb-5a4a362b5711
 # ╟─cbefaad9-0df1-4b1a-a3fb-adb5bc2e0f32
 # ╟─f7981403-8dbe-40fd-a8f0-b766be8e6c0d
-# ╠═544b0f7b-a9bb-4577-8c01-0e184b3570bc
+# ╟─544b0f7b-a9bb-4577-8c01-0e184b3570bc
 # ╟─8d1b932b-bfdc-4534-9d15-0f7a9c7b88fd
-# ╠═d92cc684-54ec-451a-bbee-080cbd997247
-# ╠═048bf2a8-49f6-4e8b-929b-eb75b0efee69
+# ╠═70dbe789-5de5-40af-a68e-bad94f1ae81f
+# ╠═2648a32b-0064-4e3b-8ac7-178c86c4b22d
+# ╠═528714e7-ebc2-4f9f-8c3e-a62a888793a6
+# ╠═610dbf1a-cc43-41dd-a1df-8d0aea4b8e02
+# ╠═6f3b0e0c-4487-471e-b696-ae0873b7ebb8
+# ╠═5a8756c2-723e-4326-aa05-0bf6893ca7ea
 # ╠═8a6286e9-7b53-43f6-8e6e-0496ac24eea4
 # ╠═c0bfae21-3738-4b40-8e2e-6d44498b96b8
 # ╠═17cfa049-0fee-49a0-b836-c8891bfd8a3d
@@ -926,6 +649,9 @@ md"""
 # ╠═a3b6ab7a-bcb9-4325-b3ca-f1c08a3807e5
 # ╠═f9a07554-4e03-475e-9f8e-9bad4e5bd962
 # ╠═439da894-e094-498e-b1b2-0dc31f42bef8
+# ╠═04520bb6-c623-4e75-acd9-b765c213c144
+# ╠═8c11abd9-8fff-4aa3-b1bb-e0b983fd0c97
+# ╠═830d1d3a-c8b6-4ff5-9783-6d3902a9645d
 # ╟─c2324815-aa18-43a0-b9f3-cd7dbcde5647
 # ╠═8bc9c3b1-0ffb-451b-bae9-bf3d209355b6
 # ╟─2defcea8-94d2-4182-b313-7b242d185c08
