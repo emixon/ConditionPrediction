@@ -589,17 +589,10 @@ Model & Dataset & Accuracy \\
 \label{fig:lasso_performance}
 \end{figure}
 
+\FloatBarrier
 
 As an additional measure of model performance, because the underlying objective is a classification problem to predict whether a boiler "Needs Action" (Score $\geq$ 88) or requires no maintenance ("Do Nothing," Score $< 88$), the predicted scores were converted to a categorical dataset using these two maintenance categories and cutoff values. The accuracy of the model to correctly predict "Needs Action" and "Do Nothing" maintenance status was then calculated and is shown in Table \ref{tab:reg_model_accuracy}. Once again, we see that the OLS, Ridge, and Lasso models perform similarly, and in the case of the classification problem, actually identically. Likewise, the training and testing datasets experience similarly poor predictive performance, with an accuracy of $66.1407\%$ and $66.0171\%$ in testing for all three models.
 
-
-
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{lasso_residuals_hist.png}
-\caption{Histogram of Residuals from the Lasso Regression Model}
-\label{fig:lasso_residuals_hist}
-\end{figure}
 
 
 \begin{table}[htbp] 
