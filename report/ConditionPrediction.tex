@@ -12,7 +12,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{graphicx}
-\graphicspath{{../figures/}}
+\graphicspath{{./figures/}}
 \usepackage[style=base,figurename=Fig.,labelfont=bf,labelsep=period]{caption}
 \usepackage{subcaption}
 \usepackage{amsmath}
@@ -995,9 +995,41 @@ Figure \ref{fig:ann_prediction_reliability} compares binned mean predicted "Need
 
 \FloatBarrier
 
+\subsection{Modeling Conclusion}
+
+Overall, the ANN produced the lowest held-out test log loss and the highest accuracy and precision at the $P(\mathrm{NeedsAction}) = 0.50$ cutoff (See Table \ref{tab:model_comparison}). The logistic regression model produced higher recall at this cutoff, but with lower precision. The difference in quality of predicted probabilities across all models was fairly small, and considering they were all developed independently by different individuals, there is reasonable confidence that they are approaching the expected results given the available data.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Comparison of model performance with $P(\mathrm{NeedsAction}) = 0.50$ cutoff.}
+    \label{tab:model_comparison}
+    \begin{tabular}{lrrrr}
+        \toprule
+        Model & Test Log Loss & Accuracy (\%) & Precision (\%) & Recall (\%) \\
+        \midrule
+        Logistic Regression & 0.438335 & 81.10 & 24.87 & 68.14 \\
+        Decision Tree       & 0.413995 & 82.62 & 69.05 & 36.38 \\
+        ANN                 & 0.388509 & 83.36 & 72.66 & 37.63 \\
+        \bottomrule
+    \end{tabular}
+
+    \vspace{0.5em}
+    \parbox{0.9\linewidth}{\footnotesize
+    \textit{Note.} Log loss evaluates the quality of predicted probabilities and does not require a classification cutoff. Accuracy, precision, and recall are dependent on the selected $P(\mathrm{NeedsAction})$ cutoff and measures can change if the threshold is adjusted.}
+\end{table}
+
+The motivation for the effort is to produce the best quality of predicted probabilities for a Value of Information (VOI) model. The practical application is described in Grussing's proposed implementation of using VOI to optimize condition assessment planning \cite{grussing2018optimized}. Figure \ref{fig:grussing_voi_example} illustrates the VOI process where expected value of an assessment is calculated based on the variable costs and probabilities of the possible decision branches using work planning thresholds.  For Grussing's case, he used a Markov state transition matrix (representing component degradation) and some assumed assessor error ranges for the probability scores. The drawback of the Markov model is that the degradation transitions did not consider ongoing maintenance actions from prior year investments and would tend to underestimate the actual observed conditions. Another method of producing the probabilities is to simply assign the prevalence of historical assessments in each decision region (which would correlate to a log loss of $\approx$ .524).  The models developed in this study, while not able to achieve optimal performance, would still provide a practical improvement over the prevalence only or degradation based approaches.
+
+\begin{figure}
+\centering
+\includegraphics[width=.8\linewidth]{Grussing_VOI_Example.png}
+\caption{Value of Information for Assessment Planning Example}
+\label{fig:grussing_voi_example}
+\end{figure}
+
 \newpage
 
 \label{section:references}
-\bibliography{./references}
+\bibliography{references}
 %
 \end{document}
