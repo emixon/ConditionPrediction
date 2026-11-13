@@ -485,13 +485,13 @@ Additionally, OLS regression minimizes the squared $L_2$ norm. The objective fun
 \]
 where $\hat{\beta}$ is a vector of the estimated regression coefficients $\beta$.
 
-The second type of linear regression model, ridge regression, keeps the same model form as the OLS regression model, while adding a squared $L_2$ norm regularization term to the objective function \cite{brunton2022data}. Regularization penalizes models that have large coefficients, and $L_2$ regularization pushes the values of small-valued parameters towards zero. The ridge regression objective function is given by:
+The second type of linear regression model, Ridge regression, keeps the same model form as the OLS regression model, while adding a squared $L_2$ norm regularization term to the objective function \cite{brunton2022data}. Regularization penalizes models that have large coefficients, and $L_2$ regularization pushes the values of small-valued parameters towards zero. The Ridge regression objective function is given by:
 \[
 \beta_{\text{Ridge}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_2^2 \right)
 \]
 where $\lambda$ is a hyperparameter coefficient that specifies the strength of the regularization. For our model, $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package.
 
-Finally, the third type of linear regression model, lasso regression, also keeps the same model form as the OLS regression model, but instead adds an $L_1$ norm regularization term to the OLS objective function \cite{brunton2022data}. $L_1$ regularization also pushes the values of small-valued parameters to be smaller, but not nearly as strongly as $L_2$ regularization. The lasso regression objective function is given by:
+Finally, the third type of linear regression model, Lasso regression, also keeps the same model form as the OLS regression model, but instead adds an $L_1$ norm regularization term to the OLS objective function \cite{brunton2022data}. $L_1$ regularization also pushes the values of small-valued parameters to be smaller, but not nearly as strongly as $L_2$ regularization. The Lasso regression objective function is given by:
 \[
 \beta_{\text{Lasso}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_1 \right)
 \]
@@ -626,18 +626,21 @@ where N is the number of observations, $\hat y_n$ is the predicted probability t
 
 Again, Julia's MLJ package was used to construct the model. With this package, the logistic regression model includes an $L_2$ norm regularization term, like the Ridge regression model above. The objective function for the logistic regression model is:
 \[
-\beta = \arg\min_{\beta} \left( L(y, X\beta) + \frac{1}{2} n \lambda \|\beta\|_2^2 \right)
+\beta_{\text{Logistic}} = \arg\min_{\beta} \left( L(y, X\beta) + \frac{1}{2} n \lambda \|\beta\|_2^2 \right)
 \]
 where $y$ is a vector of the observed, true classifications (in this case, maintenance status as class 1 = "Needs Action" or class 0 ="Do Nothing"), $\beta$ is a vector of coefficients, $X$ is a matrix of dependent variable values, $\lambda$ is a hyperparameter coefficient for the $L_2$ norm regularization term, and $L(y, X\beta)$ is the BCE loss function as defined above \cite{mlj_linear_models}
 
 Model training and testing followed a similar workflow to the Ridge and Lasso regression models. The data were first randomly partitioned into training ($80\%$) and testing ($20\%$) sets, and the hyperparameter $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package. The tuned model was then fit using the full training dataset, and performance was evaluated using the held out testing $20\%$ of the data. Log loss was used as the performance metric for the logistic regression model.
 
+Table \ref{tab:logistic_params} shows the model coefficients for the logistic model, as well as the tuned $\lambda$ values, while Table\ref{tab:Logistic_performance_comparison} gives the log loss and accuracy for the logistic regression model training and testing datasets. Table \ref{tab:confusion_matrix} is a confusion matrix showing the predicted versus actual classification of the logistic regression classifier model on the testing dataset. Finally, Figure \ref{fig:logistic_hist} is a probability separation histogram for the actual "Do Nothing" and "Needs Action" classes in the testing dataset.
+
+From these results, we see that the logistic regression classifier model is an improvement upon the OSL, Ridge, and Lasso models, with a testing log loss and accuracy of 0.438335 and $81.099\%$, respectively. However, the confusion matrix shows that the model classifies a substantial number of actual "Do Nothing" observations as "Needs Action," and the probability separation histogram also does not show a clear cutoff or separation between the two data classes. Together, these results indicate that although the logistic regression model is better at predicting building maintenance category than the other linear regression approaches that were used, it is still not a particularly good fit for the data.
 
 \begin{table}[htbp]
 \centering
-\caption{Logistic Regression Parameter Estimates}
+\caption{Logistic Regression Model Coefficients}
 \label{tab:logistic_params}
-\begin{tabular}{lcc}
+\begin{tabular}{lc}
 \toprule Feature & Model Coefficient \\ 
 \textbf{Parameter} & {\textbf{Logistic}} \\
 \midrule
@@ -654,8 +657,6 @@ Climate            &  0.154602 \\
 \bottomrule
 \end{tabular}
 \end{table}
-
-\end{document}
 
 \begin{table}[htbp]
 \centering 
