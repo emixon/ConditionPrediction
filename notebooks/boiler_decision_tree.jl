@@ -637,6 +637,99 @@ let
     "Saved decision-tree figures to: $folder"
 end
 
+# ╔═╡ 648d9e22-3aa2-4ef8-979f-46e5f40cd6a6
+rounded_table(
+    select(
+        best_by_feature,
+        :FeatureSet,
+        :NFeatures,
+        :FixedSettingsCV,
+        :TunedCV,
+        :BestDepth,
+        :BestMinLeaf,
+    )
+)
+
+# ╔═╡ eaf63361-48aa-4785-a7ea-30837eec227a
+rounded_table(
+    select(
+        stage_comparison,
+        :Stage,
+        :FeatureSet,
+        :Depth,
+        :MinLeaf,
+        :CV_LogLoss,
+    )
+)
+
+# ╔═╡ da2cf258-659c-4dfc-aa74-0dc722fad0db
+let
+    s = selected_cv.summary
+
+    DataFrame(
+        Item = [
+            "Selected feature set",
+            "Number of predictors",
+            "Maximum depth setting",
+            "Minimum observations per leaf",
+            "Actual fitted depth",
+            "Actual number of leaves",
+            "Training observations",
+            "Test observations",
+            "Configurations evaluated",
+            "Score threshold",
+            "Probability cutoff",
+        ],
+        Value = [
+            string(s.FeatureSet),
+            string(s.NFeatures),
+            string(s.Depth),
+            string(s.MinLeaf),
+            string(model_summary.ActualDepth),
+            string(model_summary.Leaves),
+            string(length(ytrain)),
+            string(length(ytest)),
+            string(length(joint_search.runs)),
+            string(score_threshold),
+            string(probability_cutoff),
+        ],
+    )
+end
+
+# ╔═╡ 9711b4c6-f9b5-4b29-a1c7-53fd8159e7eb
+DataFrame(
+    Predictor = string.(selected_cv.spec.cols)
+)
+
+# ╔═╡ 8c093333-940a-4bb2-9a07-7cd001e89514
+rounded_table(
+    select(
+        baseline_vs_selected,
+        :Model,
+        :LogLoss,
+        :Accuracy_pct,
+        :Precision_pct,
+        :Recall_pct,
+        :F1_pct,
+    )
+)
+
+# ╔═╡ e77b376a-be69-4bda-aafa-a01c4bb97b47
+let
+    m = final_fit.test
+
+    DataFrame(
+        PredictedClass = ["DoNothing", "NeedsAction"],
+        Actual_DoNothing = [m.TN, m.FP],
+        Actual_NeedsAction = [m.FN, m.TP],
+    )
+end
+
+# ╔═╡ 8e88b206-d743-48f8-94f9-c67f14cd182f
+rounded_table(
+    sort(importance, :Importance; rev=true)
+)
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -2857,5 +2950,12 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═dfcaed71-dabe-4207-9980-863e35da09a6
 # ╠═71a2e3d1-626f-4605-93c8-9c3a4b10e841
 # ╠═de91e310-e274-430f-9f97-48258fde6400
+# ╠═648d9e22-3aa2-4ef8-979f-46e5f40cd6a6
+# ╠═eaf63361-48aa-4785-a7ea-30837eec227a
+# ╠═da2cf258-659c-4dfc-aa74-0dc722fad0db
+# ╠═9711b4c6-f9b5-4b29-a1c7-53fd8159e7eb
+# ╠═8c093333-940a-4bb2-9a07-7cd001e89514
+# ╠═e77b376a-be69-4bda-aafa-a01c4bb97b47
+# ╠═8e88b206-d743-48f8-94f9-c67f14cd182f
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
