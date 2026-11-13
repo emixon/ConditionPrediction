@@ -469,7 +469,7 @@ The relevant types of machine learning models that will be tested and cross vali
 
 \section{Preliminary Modeling}
 
-\subsection{Regression Modeling}
+\subsection{Multiple Linear Regression Modeling}
 
 As a first attempt at predictive modeling of the data, three different types of linear regression models were constructed to predict a boiler's Score, treated in this case as a continuous variable, using the independent variables in the wrangled dataset (RSL, PredictedCI, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate). All regression models were constructed using Julia's MLJ package.
 
@@ -481,21 +481,21 @@ where $y$ is a vector of the observed dependent variable values (in this case, S
 
 Additionally, OLS regression minimizes the squared $L_2$ norm. The objective function for ordinary least squares regression is given as 
 \[
-\hat{\beta}_{\text{OLS}} = \underset{\beta}{\operatorname{argmin}} \lVert y - X\beta \rVert_2^2
+\beta_{\text{OLS}} = \underset{\beta}{\operatorname{argmin}} \lVert y - X\beta \rVert_2^2
 \]
 where $\hat{\beta}$ is a vector of the estimated regression coefficients $\beta$.
 
-The second type of linear regression model, ridge regression, keeps the same model form as the OLS regression model, while adding a squared $L_2$ norm regularization term to the objective function. Regularization penalizes models that have large coefficients, and $L_2$ regularization pushes the values of small-valued parameters towards zero. The ridge regression objective function is given by:
+The second type of linear regression model, ridge regression, keeps the same model form as the OLS regression model, while adding a squared $L_2$ norm regularization term to the objective function \cite{brunton2022data}. Regularization penalizes models that have large coefficients, and $L_2$ regularization pushes the values of small-valued parameters towards zero. The ridge regression objective function is given by:
 \[
-\hat{\beta}_{\text{Ridge}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_2^2 \right)
+\beta_{\text{Ridge}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_2^2 \right)
 \]
 where $\lambda$ is a hyperparameter coefficient that specifies the strength of the regularization. For our model, $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package.
 
-Finally, the third type of linear regression model, lasso regression, also keeps the same model form as the OLS regression model, but instead adds an $L_1$ norm regularization term to the OLS objective function. $L_1$ regularization also pushes the values of small-valued parameters to be smaller, but not nearly as strongly as $L_2$ regularization. The lasso regression objective function is given by:
+Finally, the third type of linear regression model, lasso regression, also keeps the same model form as the OLS regression model, but instead adds an $L_1$ norm regularization term to the OLS objective function \cite{brunton2022data}. $L_1$ regularization also pushes the values of small-valued parameters to be smaller, but not nearly as strongly as $L_2$ regularization. The lasso regression objective function is given by:
 \[
-\hat{\beta}_{\text{Lasso}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_1 \right)
+\beta_{\text{Lasso}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_1 \right)
 \]
-Again, for the laso regression model, $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package.
+Again, for the Lasso regression model, $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package.
 
 Prior to training each of these models, the data were randomly partitioned into training ($80\%$) and testing ($20\%$). The OLS model was fit using the training dataset. Similarly, for the Ridge and Lasso models, once  $\lambda$ was tuned using five-fold cross validation of the testing set, the model was then fit using the full training dataset. Finally, performance was evaluated using the held out testing $20\%$ of the data. Table \ref{tab:performance_comparison} compares the coefficient of determination $R^2$, mean absolute error (MAE), and root mean square error (RMSE) for the OLS, Ridge, and Lasso models and training and testing datasets. Table \ref{tab:coefficient_comparison} shows the model coefficients for the three models, as well as the tuned $\lambda$ values for the Ridge and Lasso models. Additionally, Figures \ref{fig:ols_performance}, \ref{fig:ridge_performance}, and \ref{fig:lasso_performance} plot the predicted versus actual Score values for the OLS, Ridge, and Lasso models, respectively. Note that while Score was modeled as a continuous variable in this case, in practice it is typically assigned specific rating values as part of a direct condition rating (see definitions in \ref{table:AssessmentScores}), which accounts for the dominant vertical bands of points in the scatter plots. The cases of dots between the vertical bands represent distress surveys, when the range of possible scores is continuous rather than categorical.
 
@@ -534,6 +534,7 @@ Model & Dataset & $R^2$ & MAE & RMSE \\
 Feature & OLS & Ridge & Lasso \\
 \midrule
 $\lambda$ & -- & 0.0162378 & 0.00127427 \\
+Intercept & 84.784249 & 84.784239 & 84.783922 \\
 RSL & 3.50085 & 3.3656 & 3.5687 \\
 PredictedCI & 2.51449 & 2.5951 & 2.44886 \\
 PrevAssessed & -0.893353 & -0.916602 & -0.872356 \\
@@ -546,6 +547,7 @@ Climate & -0.305429 & -0.298896 & -0.306704 \\
 \end{tabular}
 \label{tab:coefficient_comparison}
 \end{table}
+
 
 \begin{table}[htbp]
 \centering 
@@ -567,6 +569,9 @@ Model & Dataset & Accuracy \\
 \end{tabular}
 \label{tab:performance_comparison}
 \end{table}
+
+\FloatBarrier
+
 
 \begin{figure}
 \centering
@@ -609,11 +614,87 @@ Lasso & 66.1407 & 66.0171 \\
 \end{table}
 
 
+Next, because the ultimate goal is to predict boiler maintenance classification, a logistic regression model was constructed. Logistic regression is a form of linear regression model that has the logistic function, or sigmoid function, added to the output in order to estimate the probability that a given observation falls into one class (class 1) over another (class 0) \cite{brunton2022data}. The logistic function is:
+\[
+f(x) = \frac{1}{1 + e^{-x}}
+\]
+Additionally, the loss metric used for logistic regression is binary cross-entropy (BCE), also known as log loss. The binary cross entropy is as follows:
+\[
+\mathrm{BCE} =\ -\frac1N\sum_{n=1}^N\ \bigg[y_n  \log \hat y_n + (1 - y_n)  \log (1 - \hat y_n)\bigg]
+\]
+where N is the number of observations, $\hat y_n$ is the predicted probability that an observation $n$ belongs to class 1, and $y_n$ is the true class of the observation. A BCE of 0 indicates a perfect model, and higher values indicate poorer model performance. 
+
+Again, Julia's MLJ package was used to construct the model. With this package, the logistic regression model includes an $L_2$ norm regularization term, like the Ridge regression model above. The objective function for the logistic regression model is:
+\[
+\beta = \arg\min_{\beta} \left( L(y, X\beta) + \frac{1}{2} n \lambda \|\beta\|_2^2 \right)
+\]
+where $y$ is a vector of the observed, true classifications (in this case, maintenance status as class 1 = "Needs Action" or class 0 ="Do Nothing"), $\beta$ is a vector of coefficients, $X$ is a matrix of dependent variable values, $\lambda$ is a hyperparameter coefficient for the $L_2$ norm regularization term, and $L(y, X\beta)$ is the BCE loss function as defined above \cite{mlj_linear_models}
+
+Model training and testing followed a similar workflow to the Ridge and Lasso regression models. The data were first randomly partitioned into training ($80\%$) and testing ($20\%$) sets, and the hyperparameter $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package. The tuned model was then fit using the full training dataset, and performance was evaluated using the held out testing $20\%$ of the data. Log loss was used as the performance metric for the logistic regression model.
+
+
+\begin{table}[htbp]
+\centering
+\caption{Logistic Regression Parameter Estimates}
+\label{tab:logistic_params}
+\begin{tabular}{lcc}
+\toprule Feature & Model Coefficient \\ 
+\textbf{Parameter} & {\textbf{Logistic}} \\
+\midrule
+$\lambda$          &  0.001833 \\
+Intercept          & -1.514010 \\
+RSL                & -0.607850 \\
+PredictedCI        & -0.425109 \\
+PrevAssessed       &  0.183116 \\
+NormalizedAssetAge &  0.024009 \\
+MonthSin           & -0.025699 \\
+MonthCos           &  0.052571 \\
+LogCRV             &  0.074351 \\
+Climate            &  0.154602 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
+
+\begin{table}[htbp]
+\centering 
+\caption{Logistic regression performance on training and testing datasets.} 
+\begin{tabular}{llccc}
+\hline
+Model & Dataset & Log Loss & Accuracy (\%) \\
+\hline
+\multirow{2}{*}{Logistic Regression}
+& Train & 0.434056 & 81.327 \\
+& Test & 0.438335 & 81.099 \\
+\hline
+\end{tabular}
+\label{tab:Logistic_performance_comparison}
+\end{table}
+
+
+\begin{table}[htbp]
+    \centering
+    \caption{Testing data confusion matrix for the logistic regression classifier model}
+    \label{tab:confusion_matrix}
+    \begin{tabular}{llcc}
+        \toprule
+        & & \multicolumn{2}{c}{\textbf{Actual Classification}} \\
+        \cmidrule(lr){3-4}
+        & & \text{Do Nothing} & \text{Needs Action} \\
+        \midrule
+        \multirow{2}{*}{\begin{tabular}[c]{@{}l@{}}\textbf{Predicted}\\\textbf{Classification}\end{tabular}} 
+        & \text{Do Nothing}   & 1,942 & 65  \\
+        & \text{Needs Action} & 420   & 139 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
 \begin{figure}
 \centering
 \includegraphics[width=.8\linewidth]{log_prob_sep_hist.png}
 \caption{Predicted Probability by Observed Region for the Logistic Regression Model}
-\label{fig:lasso_residuals_hist}
+\label{fig:logistic_hist}
 \end{figure}
 \FloatBarrier
 

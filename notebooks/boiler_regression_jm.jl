@@ -652,6 +652,9 @@ begin
     ols_coef_df
 end
 
+# ╔═╡ cefde733-e670-4873-a7ac-a2c5ccb1c62f
+fitted_params(mach_ols).linear_regressor.intercept
+
 # ╔═╡ 618282f9-e415-4a17-b8f0-92e92e6a7668
 begin
 	plot_performance(y_train_ols, y_test_ols, ŷ_train_ols, ŷ_test_ols)
@@ -734,6 +737,9 @@ model_accuracy(y_test_ridge, y_train_ridge, ŷ_test_ridge, ŷ_train_ridge)
 
 # ╔═╡ 7bba9815-2ec7-477f-88b9-30e8d785ad62
 fitted_params(mach_ridge)
+
+# ╔═╡ 1650404c-5931-4bdd-a189-ba77a88afed9
+fitted_params(mach_ridge).deterministic_tuned_model.best_fitted_params.intercept
 
 # ╔═╡ d7c76249-16a5-4116-9f00-7b2c8a5ed474
 begin
@@ -858,7 +864,10 @@ begin
 end
 
 # ╔═╡ 86b015ac-f3cd-45e6-bbe0-6614522928f2
-report(mach_ridge).deterministic_tuned_model.best_history_entry.model.lambda
+report(mach_lasso).deterministic_tuned_model.best_history_entry.model.lambda
+
+# ╔═╡ afae7819-ceff-490e-a9c2-b5bfbb25c142
+fitted_params(mach_lasso).deterministic_tuned_model.best_fitted_params.intercept
 
 # ╔═╡ 8c8eefa7-f702-4185-bf11-02722c577fed
 md"""
@@ -4317,6 +4326,7 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═3b280832-9ad9-437c-becd-e79eb3a51e91
 # ╠═a12d3efa-e011-4939-bc03-ee75cf72d5d0
 # ╠═5016e7fd-380b-4a38-8e7a-7e63cbb1518a
+# ╠═cefde733-e670-4873-a7ac-a2c5ccb1c62f
 # ╠═618282f9-e415-4a17-b8f0-92e92e6a7668
 # ╠═39d6f28c-405a-4eb7-95dd-dd01c8de7f25
 # ╠═f92f7120-79fd-4c0b-8632-e29cb161788a
@@ -4328,6 +4338,7 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═6a054746-79b0-4f1f-98a0-05da22b2b6cc
 # ╠═62a5eea0-e180-43ed-9f5b-1a190a625e48
 # ╠═7bba9815-2ec7-477f-88b9-30e8d785ad62
+# ╠═1650404c-5931-4bdd-a189-ba77a88afed9
 # ╠═d7c76249-16a5-4116-9f00-7b2c8a5ed474
 # ╟─f8d5ee66-ddf4-4c5a-ad92-aea4da10fcce
 # ╟─59bf7ef6-c3bf-4cf5-96ef-36335f333327
@@ -4340,6 +4351,7 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═fe3e29de-2765-45f6-9c6f-d67d90756d4d
 # ╠═6fb87d58-690b-489a-bde9-8e86f717c19a
 # ╠═86b015ac-f3cd-45e6-bbe0-6614522928f2
+# ╠═afae7819-ceff-490e-a9c2-b5bfbb25c142
 # ╟─8c8eefa7-f702-4185-bf11-02722c577fed
 # ╠═1a443f32-e338-45e6-b6ce-39bcccb3a8dd
 # ╠═424c1659-f241-4eab-93fa-02be380bbb2c
