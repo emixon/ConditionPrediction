@@ -42,41 +42,35 @@
 \affil[2]{Email: jm128@illinois.edu}
 \affil[3]{Email: jzhwang3@illinois.edu}
 \maketitle
-
 \section{Introduction}
 
 Sustainment of very large real property portfolios requires many complex decisions. When a few decision makers must allocate constrained maintenance funding across millions of facilities, informed individual repair/replace decisions become infeasible for the whole portfolio. Real property managers in this situation rely on mathematical models to assist with funding distribution and work action decisions across the large scope.  These sustainment decision models generally rely on condition information about the inventory within the portfolio to drive their decision-making. This is known as a knowledge-based decision model.  In many cases, it is infeasible to install condition sensors on every component of every facility, so knowledge-based models will use expert observations in the form of condition assessments to inform inventory condition.  While sustainment models can attempt to predict condition deterioration over time, much like weather prediction models, they are only reliable for short-term horizons. So, periodic re-observations are required through assessment contracts with large architecture and engineering (A\&E) firms to collect and update condition information.  
 
-Stemming from these requirements comes a need for real property managers to decide what inventory in their portfolio is due for re-observation.  Historically, the most common method is to simply reassess everything every 5 years (i.e. 20\% of the portfolio per year).  To reduce the amount and therefore cost of these assessments, a value of information (VOI) strategy could be utilized to make informed selections of which assets or components within the inventory are of the highest value to re-assess (i.e. the most likely to improve our maintenance investment decisions).  A critical requirement of this model is to be able to predict what scores an assessor would likely assign to a component based on historical data. 
+Stemming from these requirements comes a need for real property managers to decide what inventory in their portfolio is due for re-observation.  Historically, the most common method is to simply reassess everything every 5 years (i.e. 20\% of the portfolio per year).  To reduce the amount and therefore cost of these assessments, a value of information (VOI) strategy could be utilized to make informed selections of which assets or components within the inventory are of the highest value to re-assess (i.e. the most likely to improve our maintenance investment decisions). The practical application is described in Grussing's proposed implementation of using VOI to optimize condition assessment planning \cite{grussing2018optimized}. Figure \ref{fig:grussing_voi_example} illustrates the VOI process where expected value of an assessment is calculated based on the variable costs and probabilities of the possible decision branches using work planning thresholds.  For Grussing's case, he used a Markov state transition matrix (representing component degradation) and some assumed assessor error ranges for the probability scores. The drawback of the Markov model is that the degradation transitions did not consider ongoing maintenance actions from prior year investments and would tend to underestimate the actual observed conditions. 
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=.8\linewidth]{Grussing_VOI_Example.png}
+\caption{Value of Information for Assessment Planning Example \protect\cite{grussing2018optimized}}
+\label{fig:grussing_voi_example}
+\end{figure}
+
+The goal of this study is to improve the predicted probabilities (and therefore the quality of the VOI model) by analyzing historical assessment data and building a machine learning based model that accounts for previous sustainment trends. Specifically, classification models are developed to estimate the probability of a new assessment score falling into either the "Do Nothing" (Green) or "Repair" (Not Green) maintenance decision regions. In practice, this approach could be extended to include additional decision regions, such as "Replace" or "Renovate" depending on the maintenance manager's priorities. To accomplish this, an exploratory data analysis and Principal Component Analysis (PCA) are first performed to identify the most informative component parameters, followed by an evaluation and comparison of multivariable regression, decision tree, and artificial neural network (ANN) models.
 
 \subsection{Dataset}
 
-The dataset used for this project comes from assessment data in the Sustainment Management System (SMS) BUILDER platform developed by Construction Engineering Research Laboratory (CERL) \cite{erdc_sms_roc}. The full dataset includes approximately 2.7 million observations. Observations include both a manually collected direct condition rating and a predicted condition index generated from component information using the SMS Weibull degradation model at the time of an assessment. Multiple observations can be generated for given components if they have multiple assessment records. The observation's predicted Condition Index (CI) is generated using the following:
+The dataset used for this study comes from assessment data in the Sustainment Management System (SMS) BUILDER platform developed by Construction Engineering Research Laboratory (CERL) \cite{erdc_sms_roc}. Although the full dataset consists of approximately 2.7 million observations, a subset corresponding to the boilers material equipment category (MEC), consisting of 12,832 assessments, is used for detailed analysis and model development. Observations include both a manually collected direct condition rating and a predicted condition index generated from component information using the SMS Weibull degradation model at the time of an assessment. Multiple observations can be generated for given components if they have multiple assessment records. The observation's predicted Condition Index (CI) is generated using the following:
 
 \begin{equation}
 \label{eq:sms-weibull-ci}
 \mathrm{CI}(t) = A \left( \frac{100}{\mathrm{CI}_{\mathrm{T}}} \right)^{ -\left(\frac{t}{\beta}\right)^{\alpha} }
 \end{equation}
 
-Where $\mathrm{t}$ is the normalized age of the component, $\mathrm{CI_T}$ is the design life of the component, A is the initial starting condition (usually 100), $\alpha$ is the scale or characteristic age of replacement, and $\beta$ is the shape or degradation parameter. The $\alpha$ and $\beta$ parameters are provided from a per specification reference catalog within the SMS, however these values can be shifted after assessments to adjust the curve to fit to the assessed condition. In cases where components have multiple assessments, observations use the SMS $\alpha$ and $\beta$ shift calculations prior to calculating the predicted CI; this ensures continuity with the prediction at the time of the assessment. A detailed intuition for the Weibull model is available using the Desmos tool that can be found at \url{https://www.desmos.com/calculator/cenbpl3qtf}. The final resulting observations also capture other information about the component. See Table~\ref{table:assembly} for complete details.
+Where $\mathrm{t}$ is the normalized age of the component, $\mathrm{CI_T}$ is the design life of the component, A is the initial starting condition (usually 100), $\alpha$ is the scale or characteristic age of replacement, and $\beta$ is the shape or degradation parameter. The $\alpha$ and $\beta$ parameters are provided from a per specification reference catalog within the SMS, however these values can be shifted after assessments to adjust the curve to fit to the assessed condition. In cases where components have multiple assessments, the SMS $\alpha$ and $\beta$ shift calculations are applied prior to calculating the predicted CI to ensure continuity with the prediction at the time of the assessment. A detailed intuition for the Weibull model is available using the Desmos tool that can be found at \url{https://www.desmos.com/calculator/cenbpl3qtf}. Additional component attributes included in each observation are detailed in Table~\ref{table:assembly}.
 
-Assessment scores generally are collected as "Direct Condition Ratings", amounting to a selection from 9 possible score options. An example criterion for these scores can be found below in Table \ref{table:AssessmentScores} (Not all organizations have exactly the same criterion, but the score choices are always the same). Most organizations have additional guidance through large (sometimes 1000's of pages) assessment guides. These guides direct the types of components to inventory and assess, when and how to input comments about the assessment, additional criterion for scoring for specific component types, and other data quality governance. 
+Assessment scores generally are collected as "Direct Condition Ratings", amounting to a selection from 9 possible score options. An example criterion for these scores can be found below in Table \ref{table:AssessmentScores} (Not all organizations have exactly the same criterion, but the score choices are always the same). Most organizations have additional guidance through large (sometimes 1000's of pages) assessment guides. Within these guides, direction is provided on the types of components to inventory and assess, when and how to input comments about the assessment, additional criterion for scoring for specific component types, and other data quality governance. 
 
-\subsection{Proposed Objectives}
-
-Although the dataset consists of 2.7 million observations, a subset corresponding to a single material equipment category (MEC) will be used for this project. The MEC for boilers consists of 12,832 assessments, so it should be possible to perform a detailed analysis for the specifications within this MEC. The goal of this study will be to identify the best parameters about a component that would inform the best possible predictions about a likely assessment score distribution.  The study could also explore different types of models such as binning solutions, decision trees (such as eXtreme Gradient Boosting, abbreviated XGBoost), artificial neural networks (ANNs), or other class-based solutions to find which of the options would inform the best predictions.
-
-The proposed workflow for the project is:
-\begin{enumerate}
-\item Perform initial exploratory analysis to identify data wrangling needs and potential data bias.
-\item Perform Principal Component Analysis (PCA) to identify the best predictive parameters.
-\item Build a prediction model returning multi-class distribution using an ANN trained on identified principal components.
-\item Build a prediction model returning multi-class distribution using XGBoost (or other decision tree library) trained on identified principal components.
-\item Build additional prediction models based on in-class statistical learning solutions.
-\item Perform comparative study between prediction models to identify which has the best predictive performance.
-\end{enumerate}
-
-\begin{table}
+\begin{table}[htbp]
 \caption{Assessment Observation Data}
 \label{table:assembly}
 \centering
@@ -108,7 +102,7 @@ Climate & Int & Department of Energy (DOE) based Climate Zones. \\
 Fac & Int & Unique identifier for the type/purpose of the component's parent asset. \\
 AssetAge & Int (Years) & Age in years of the component's parent asset. \\
 AssetDesignLife & Int (Years) & Designed lifespan in years of the component's parent asset. \\
-PrevScore & Float & Previous assessment score. Is empty if the component has not assessed before. \\
+PrevScore & Float & Previous assessment score. Is empty if the component has not been assessed before. \\
 \hline
 \multicolumn{3}{l}{$\ast$ System->MEC->Spec form a data hierarchy similar to a WBS like classification structure.} \\
 \multicolumn{3}{l}{$\ast$ Data has been obfuscated, replacing readable definitions with numbers.} \\
@@ -117,7 +111,7 @@ PrevScore & Float & Previous assessment score. Is empty if the component has not
 \normalsize
 \end{table}
 
-\begin{table}
+\begin{table}[htbp]
 \caption{Example Assessment Scoring Criteria based on USACE Guidance.}
 \label{table:AssessmentScores}
 \centering
@@ -147,23 +141,7 @@ Red ($-$) & 10 & Complete degradation and loss of serviceability. May result in 
 
 \section{Exploratory Data Analysis}
 
-\subsection{Basic Data Description and Initial Questions}
-
-As a first step of exploratory analysis, the shapes of individual columns of the dataset were visualized to understand the distributions of the data. Although distributions were produced and explored for all fields in the dataset, only the distributions most relevant to the motivating questions outlined in this section are highlighted in this report. 
-
-For the purposes of this project, two of the most pertinent columns in the dataset include the predicted condition score, or CI, of the Weibull degradation model and the actual observed score of the assessor (i.e., assessor rating).  Based on the histograms for these two variables, there is a visually identifiable difference between the expected degradation and the assessed scores (Figures \ref{fig:ci_dist} and \ref{fig:score_dist}). There also seems to be a heavy bias toward ratings of 88 in the assessed boiler condition scores compared to the Weibull-predicted CIs.
-
-There are some rational narratives that can explain the disagreement in predicted and assessed scores.  The SMS system from which the observations are sourced is used by organizations to plan maintenance management.  Work analysis rules are put into place within the system to prioritize maintenance funding allocation.  For "D30" systems (This refers to the UNIFORMAT classification hierarchy, "D30" in this case represents D - mechanical systems and 30 - the subset for boilers), a typical ruleset will specify that components with a CI less than 85 should be marked for repair action, and components with a remaining service life (RSL) of less than 2 should be marked for replacement \cite{rsmeans_uniformatii}. If maintenance dollars are being executed by that guidance, then it would be expected that assessors rarely come across boilers with condition less than 85.  This also makes rational sense from a facility function perspective, heating, ventilation, and air conditioning (HVAC) systems tend to get immediate attention when they fail, as they are considered critical for most facilities. A score of 88 represents a well maintained and functioning unit, which is what is expected based on maintenance priority. Additionally, this bias is not unique to SMS data, and has been observed in other inspection annd assessment-based condition datasets. One such example is an Ontario bridge inspection dataset where a similar condition clustering is observed at around 77 (Based on their unique condition rating system) \cite{ontario_bridge_conditions_2021}.
-
-Additionally, based on this visual inspection of the assessed score distribution, questions were formulated to attempt to identify how data could be classified to distinguish between boilers that are kept to specified condition versus those that are allowed to deteriorate. Answers to these questions may assist in feature selection for the future construction of a prediction model. Looking at several of the other distributions, including Remaining Service Life (RSL) (Figure \ref{fig:rsl_dist}), Month (Figure \ref{fig:month_dist}), and Climate (Figure \ref{fig:climate_dist}), raised possible considerations including:
-
-\begin{itemize}
-    \item Does RSL (or other lifecycle variables) correlate with assessor ratings?
-    \item Does the month (i.e Season) of the assessment impact the expected assessed condition for boilers?
-    \item Does the climate (warm or cold) impact expected assessed condition? (Note: Figure \ref{fig:doe_climate_map} illustrates the climate zones used in the dataset observations)
-    \item Do specific facility types show maintenance priority?
-    \item What other ways could the data be classified to help with prediction models?
-\end{itemize}
+As a first step of exploratory analysis, the shapes of individual columns of the dataset were visualized to understand the distributions of the data. Although distributions were produced and explored for all fields in the dataset, only the distributions most relevant to the motivating questions are highlighted in this report. For the purposes of this project, three of the most pertinent columns in the dataset include the predicted condition score, or CI, of the Weibull degradation model, the actual observed score of the assessor (i.e., assessor rating), and Remaining Service Life (RSL). Because RSL is calculated from the component's design life and curve adjusted effective age, it is directly tied to the Weibull degradation curve used to generate the predicted CI and provides an intuitive measure of remaining component life (Figure \ref{fig:rsl_dist}). Based on the histograms for the condition variables, there is a visually identifiable difference between the expected degradation and the assessed scores (Figures \ref{fig:ci_dist} and \ref{fig:score_dist}). There is also a heavy apparent bias toward ratings of 88 in the assessed boiler condition scores compared to the Weibull predicted CIs.
 
 \begin{figure}
 \centering
@@ -185,6 +163,10 @@ Additionally, based on this visual inspection of the assessed score distribution
 \caption{Remaining Service Life Distribution}
 \label{fig:rsl_dist}
 \end{figure}
+
+There are some rational narratives that can explain the disagreement in predicted and assessed scores.  The SMS system from which the observations are sourced is used by organizations to plan maintenance management.  Work analysis rules are put into place within the system to prioritize maintenance funding allocation.  For "D30" systems (This refers to the UNIFORMAT classification hierarchy, "D30" in this case represents D - mechanical systems and 30 - the subset for boilers), it is typically specified by the ruleset that components with a CI less than 85 should be marked for repair action, and components with an RSL of less than 2 should be marked for replacement \cite{rsmeans_uniformatii}. If maintenance dollars are being executed by that guidance, then it would be expected that assessors rarely come across boilers with condition less than 85.  This also makes rational sense from a facility function perspective, heating, ventilation, and air conditioning (HVAC) systems tend to get immediate attention when they fail, as they are considered critical for most facilities. A score of 88 represents a well maintained and functioning unit, which is what is expected based on maintenance priority. Additionally, this bias is not unique to SMS data, and has been observed in other inspection and assessment-based condition datasets. One such example is an Ontario bridge inspection dataset where a similar condition clustering is observed at around 77 (Based on their unique condition rating system) \cite{ontario_bridge_conditions_2021}.
+
+Additionally, based on this visual inspection of the assessed score distribution, questions were formulated to attempt to identify how data could be classified to distinguish between boilers that are kept to specified condition versus those that are allowed to deteriorate. Answers to these questions may assist in feature selection for the construction of a prediction model. Looking at several of the other distributions, including Month (Figure \ref{fig:month_dist}) and Climate (Figure \ref{fig:climate_dist}), raised possible considerations. Specifically, the following questions were considered: Does RSL (or other lifecycle variables) correlate with assessor ratings? Does the month (i.e Season) of the assessment impact the expected assessed condition for boilers? Does the climate (warm or cold) impact expected assessed condition (Note: the climate zones used in the dataset observations are illustrated in Figure \ref{fig:doe_climate_map})? Finally, what other ways could the data be classified to help with prediction models?
 
 \begin{figure}
 \centering
@@ -210,11 +192,12 @@ Additionally, based on this visual inspection of the assessed score distribution
 \FloatBarrier
 
 \subsection{Pairwise Correlation Analysis}
-Next, a pairwise correlation analysis was completed to understand relationships among the features in the raw dataset. To this end, Spearman's rank correlation coefficient ($\rho$), which is a nonparametric measure of the strength and direction of the monotonic relationship between two variables \cite{scipy_spearmanr} \cite{uva_correlation}, was calculated for each combination of pairs among the following set of fifteen features from the raw dataset: NormalizedAge, EffectiveAge, RSL, Recency, PrevScore, PrevAssessed, PredictedCI, Score, Qty, AssetAge, AssetDesignLife, LogCRV, Month, Year, and Climate. Statistical significance of the correlation between variable pairs was also calculated. Figure \ref{fig:spearman_heatmap}  visualizes the results of this analysis as a heatmap of correlation coefficients. Positive correlation coefficients, shown as red squares in the heatmap, indicate a positive monotonic relationship, while negative correlation coefficients, shown as blue squares in the heatmap, represent a negative monotonic relationship.
 
-Figure \ref{fig:spearman_heatmap} shows the strongest pairwise correlations between PredictedCI and NormalizedAge, EffectiveAge, and RSL, as well as between RSL and NormalizedAge. The calculated coefficients for these relationships were -0.88, -0.81, 0.91, and -0.90, respectively, all with statistical significance at p < 0.001. However, these relationships are expected based on the characteristics of the dataset. For example, NormalizedAge is an input to the equation used to calculate PredictedCI, and EffectiveAge is used to calculate RSL. These correlations among dependent variables will need to be mitigated during the development of predictive models in order to prevent confounding.
+A pairwise correlation analysis was completed to understand relationships among the features in the raw dataset. To this end, Spearman's rank correlation coefficient ($\rho$), which is a nonparametric measure of the strength and direction of the monotonic relationship between two variables \cite{scipy_spearmanr,uva_correlation}, was calculated for each combination of pairs among the following set of fifteen features from the raw dataset: NormalizedAge, EffectiveAge, RSL, Recency, PrevScore, PrevAssessed, PredictedCI, Score, Qty, AssetAge, AssetDesignLife, LogCRV, Month, Year, and Climate. Statistical significance of the correlation between variable pairs was also calculated. The results of this analysis are visualized in Figure \ref{fig:spearman_heatmap} as a heatmap of correlation coefficients. Positive correlation coefficients, shown as red squares in the heatmap, indicate a positive monotonic relationship, while negative correlation coefficients, shown as blue squares in the heatmap, represent a negative monotonic relationship.
 
-In contrast, the relative strength of pairwise correlations with the Score variable, which represents an Expert assessor's assigned condition rating of a given boiler, are lower. For example, the correlation coefficients with the largest magnitude are those with RSL, NormalizedAge, and PredictedCI, but their values are only 0.54, -0.53, and 0.50, respectively, each with statistical significance at p < 0.001. These results indicate that Score cannot be predicted by a single correlation with another variable, and that a multivariate approach is needed to understand the complex relationships influencing Score.
+In Figure \ref{fig:spearman_heatmap}, the strongest pairwise correlations are observed between PredictedCI and NormalizedAge, EffectiveAge, and RSL, as well as between RSL and NormalizedAge. The calculated coefficients for these relationships were -0.88, -0.81, 0.91, and -0.90, respectively, all with statistical significance at p < 0.001. However, these relationships are expected based on the characteristics of the dataset. For example, NormalizedAge is an input to the equation used to calculate PredictedCI, and EffectiveAge is used to calculate RSL. These correlations among dependent variables will need to be mitigated during the development of predictive models in order to prevent confounding.
+
+In contrast, the relative strength of pairwise correlations with the Score variable, which represents an Expert assessor's assigned condition rating of a given boiler, is lower. For example, the correlation coefficients with the largest magnitude are those with RSL, NormalizedAge, and PredictedCI, but their values are only 0.54, -0.53, and 0.50, respectively, each with statistical significance at p < 0.001. These results indicate that Score cannot be predicted by a single correlation with another variable, and that a multivariate approach is needed to understand the complex relationships influencing Score.
 
 \begin{figure}
 \centering
@@ -227,16 +210,7 @@ In contrast, the relative strength of pairwise correlations with the Score varia
 
 \subsection{Data Wrangling}
 
-After initial visualization and correlation analysis steps, the data were cleaned to prepare for further analysis. Table \ref{tab:boiler_descriptive_statistics} shows some basic statistics of the raw dataset. Notice that some columns such as Recency, Climate, and PrevScore have missing values. Additionally, some columns represent non-ordinal identifiers that are not typically useful in analyses such as PCA, and most of the ordinal columns are in mixed types and ranges varying by several orders of magnitude. To address these issues, a series of data wrangling steps were performed:
-
-\begin{enumerate}
-    \item For Recency and PrevScore, the missing data represents components that have never previously been assessed. Since "Never Assessed" is potentially a valuable data point, the first step is to create a new column called "PrevAssessed" with a value of 0 or 1 representing whether a component has been assessed before.  Missing values are then replaced with the mean of available data in both Recency and PrevScore, respectively.
-    \item For Climate, the missing data is simply missing data, with no underlying significance to its absence. Therefore, the missing fields are addressed by populating them with the mean of the known climate data.
-    \item AssetAge and AssetDesignLife are better represented as a single property similar to the component NormalizedAge.  A new column is created called NormalizedAssetAge set to AssetAge / AssetDesignLife.
-    \item For Month, since we are interested in impact of seasons on assessment scores, it is better to represent this data in a way that keeps the cyclical nature of seasons intact. Two new columns are created (MonthSin and MonthCos) representing the Month in a circular projection and keeping months, like December and January, close together ordinally.
-    \item Component Replacement Value (CRV) is several orders of magnitude larger than other data fields. This may be problematic because even with data standardization prior to PCA, CRV may still be ordinally dominating. To address this, a new column is created called LogCRV representing the log of the original CRV values.  This brings the scale to a more comparable space and also makes a more symmetric dataset as can be seen in Figure \ref{fig:crv_log}
-    \item Id, Spec, System, MEC, UOM, Fac, Qty, DesignLife, Month, AssetAge, and AssetDesignLife are omitted from the PCA analysis due to either being non-ordinal identifier columns, having the same value across nearly all the dataset (Qty, DesignLife), or having alternative suitable representations from the above wrangling steps.  Score is also omitted in the interest of avoiding data leakage when back loading for analysis of potential predictive features. 
-\end{enumerate}
+After initial visualization and correlation analysis steps, the data were cleaned to prepare for further analysis. Basic statistics of the raw dataset are shown in Table \ref{tab:boiler_descriptive_statistics}. Some columns such as Recency, Climate, and PrevScore have missing values. Additionally, some columns represent non-ordinal identifiers, and most of the ordinal columns are in mixed types and ranges varying by several orders of magnitude. To address these issues, the following data wrangling steps were performed. First, for Recency and PrevScore, the missing data represents components that have never previously been assessed. Since "Never Assessed" is potentially a valuable data point, a new column called "PrevAssessed" is created with a value of 0 or 1 representing whether a component has been assessed before. Missing values are then replaced with the mean of available data in both Recency and PrevScore, respectively. Similarly, for Climate, the missing data is simply missing data, with no underlying significance to its absence. Therefore, the missing fields are addressed by populating them with the mean of the known climate data.
 
 \begin{table}[htbp]
 \caption{Descriptive Statistics for Boiler Assessment Dataset Variables}
@@ -278,6 +252,8 @@ PrevScore         & 85.82    & 10    & 100     & 9,334 & 14 \\
 \end{tabular}
 \end{table}
 
+Next, a new column is created called NormalizedAssetAge set to AssetAge / AssetDesignLife for consistency with the convention used for NormalizedAge of the component. For Month, to capture the impact of seasons on assessment scores, the variable is modified in a way that keeps the cyclical nature of seasons intact. Two new columns are created (MonthSin and MonthCos) representing the Month in a circular projection and keeping months, like December and January, close together ordinally. Additionally, to address the large magnitude difference for Component Replacement Value (CRV), a new column is created called LogCRV representing the log of the original CRV values. Through this transformation, the scale is brought to a more comparable space and a more symmetric distribution is produced, as shown in Figure \ref{fig:crv_log}. Finally, Id, Spec, System, MEC, UOM, Fac, Qty, DesignLife, Month, AssetAge, and AssetDesignLife are omitted from the PCA analysis due to either being non-ordinal identifier columns, having the same value across nearly all the dataset (Qty, DesignLife), or having alternative suitable representations from the previous wrangling steps. Score is also omitted as the dependent variable, avoiding data leakage when analyzing potential predictive features.
+
 \begin{figure}
 \centering
 \includegraphics[width=1\linewidth]{log_crv_scatter.png}
@@ -286,14 +262,12 @@ PrevScore         & 85.82    & 10    & 100     & 9,334 & 14 \\
 \end{figure}
 
 \subsection{Additional Data Insights}
-The following analyses compare green ($\mathrm{Score}\geq 88$) and not-green
-($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics,
-asset age, climate, season of assessment, and prediction error. Observations
-may include repeated assessments of the same component.
+
+In the following analyses, green ($\mathrm{Score}\geq 88$) and not-green ($\mathrm{Score}<88$) assessment records are compared in terms of lifecycle characteristics, asset age, climate, and season of assessment. Observations may include repeated assessments of the same component.
 
 \subsubsection{Lifecycle Characteristics and Assessment History}
 
-Remaining service life (RSL) and previous assessment scores provide two perspectives on the relationship between asset history and current condition (Figure~\ref{fig:julian_plot1}). Green assessments have a substantially higher average RSL (18.61) than not-green assessments (8.76), while their average previous scores are 88.56 and 79.39, respectively. The differences between these distributions indicate that both lifecycle characteristics and previous condition may contain useful information for predicting assessment scores. Although the distributions overlap, the general separation between the groups supports further consideration of these variables in predictive modeling.
+Two perspectives on the relationship between asset history and current condition are provided by RSL and previous assessment scores (Figure~\ref{fig:julian_plot1}). A substantially higher average RSL (18.61) is observed for green assessments than for not-green assessments (8.76), while their average previous scores are 88.56 and 79.39, respectively. Based on the differences between these distributions, useful information for predicting assessment scores may be contained in both lifecycle characteristics and previous condition. Although the distributions overlap, further consideration of these variables in predictive modeling is supported by the general separation between the groups.
 
 \begin{figure}[htbp]
 \centering
@@ -304,7 +278,7 @@ Remaining service life (RSL) and previous assessment scores provide two perspect
 
 \subsubsection{Condition Status Across Asset-Age Groups}
 
-Asset age is another important characteristic when examining differences in component condition (Figure~\ref{fig:julian_plot2}). The proportion of not-green assessments generally increases with age, rising from approximately 10.9\% for assets younger than 10 to 30.3\% for those between 30 and 40, before decreasing to 24.1\% for assets aged 40 or older. Although the relationship is not strictly increasing, the results indicate that asset age may help explain variations in assessed condition. The lower proportion among the oldest assets also suggests that age alone is insufficient to describe condition, highlighting the potential importance of other asset characteristics and assessment history.
+Asset age is another important characteristic when examining differences in component condition (Figure~\ref{fig:julian_plot2}). The proportion of not-green assessments generally increases with age, rising from approximately 10.9\% for assets younger than 10 to 30.3\% for those between 30 and 40, before decreasing to 24.1\% for assets aged 40 or older. Although the relationship is not strictly increasing, it is indicated by these results that variations in assessed condition may be partially explained by asset age. From the lower proportion among the oldest assets, it is also suggested that age alone is insufficient to describe condition, highlighting the potential importance of other asset characteristics and assessment history.
 
 \begin{figure}[htbp]
 \centering
@@ -315,7 +289,7 @@ Asset age is another important characteristic when examining differences in comp
 
 \subsubsection{Condition Status Across Climate Categories}
 
-Differences in assessed condition are also apparent across climate categories (Figure~\ref{fig:julian_plot3}). Climate Codes 4 and 8 have relatively high proportions of not-green assessments, approximately 50.0\% and 46.1\%, respectively, compared with only 12.4\% for Climate Code 7. This variation indicates that climate classification may provide additional information when evaluating component condition. However, nearly half of the observations have missing climate information, and the differences between categories may also reflect variations in asset age, maintenance history, or other characteristics. Further analysis is therefore necessary to determine whether climate contributes independently to condition prediction.
+Differences in assessed condition are also apparent across climate categories (Figure~\ref{fig:julian_plot3}). Relatively high proportions of not-green assessments are observed in Climate Codes 4 and 8, at approximately 50.0\% and 46.1\%, respectively, compared with only 12.4\% for Climate Code 7. Based on this variation, additional information may be provided by climate classification when evaluating component condition. However, climate data is limited across the dataset as a whole, with 6,514 of the 12,832 observations missing climate records and the remaining records unevenly distributed across only seven climate zones. Furthermore, the differences between categories may also reflect variations in asset age, maintenance history, or other characteristics. Further analysis is therefore necessary to determine whether climate contributes independently to condition prediction.
 
 \begin{figure}[htbp]
 \centering
@@ -326,7 +300,7 @@ Differences in assessed condition are also apparent across climate categories (F
 
 \subsubsection{Seasonal Variation in Condition Status}
 
-The climate comparison is extended by grouping assessments into winter, spring, summer, and fall to examine potential seasonal patterns in recorded condition (Figure~\ref{fig:julian_plot4}). For Climate Code 5, the proportion of not-green assessments increases from approximately 10.8\% during summer to 24.0\% during fall, indicating differences in condition distributions between assessment periods. Similar comparisons across the remaining climate categories provide a broader perspective on how condition status varies throughout the year. Groups containing fewer than 50 observations are identified separately to avoid overinterpreting limited data. These seasonal differences may also reflect assessment timing and asset characteristics rather than direct environmental effects.
+The climate comparison is extended by grouping assessments into winter, spring, summer, and fall to examine potential seasonal patterns in recorded condition (Figure~\ref{fig:julian_plot4}). For Climate Code 5, the proportion of not-green assessments increases from approximately 10.8\% during summer to 24.0\% during fall, indicating differences in condition distributions between assessment periods. Through similar comparisons across the remaining climate categories, a broader perspective is provided on how condition status varies throughout the year. Groups containing fewer than 50 observations are identified separately to avoid overinterpreting limited data. Assessment timing and asset characteristics, rather than direct environmental effects, may also be reflected by these seasonal differences.
 
 \begin{figure}[htbp]
 \centering
@@ -335,52 +309,11 @@ The climate comparison is extended by grouping assessments into winter, spring, 
 \label{fig:julian_plot4}
 \end{figure}
 
-\subsubsection{Season--Climate Condition Heatmap}
-
-The seasonal and climate comparisons are further summarized using a heatmap, allowing differences in not-green assessment percentages to be examined across both variables simultaneously (Figure~\ref{fig:julian_plot5}). The visualization highlights combinations of climate category and assessment season with relatively high or low proportions of not-green observations, providing a more consolidated view of the patterns examined in the preceding analysis. Differences across these combinations suggest that condition status may reflect several interacting characteristics rather than a single factor. However, groups with limited observations require cautious interpretation, particularly where relatively large percentages are based on small sample sizes.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot5.png}
-\caption{Not-Green Assessments by Season and Climate.}
-\label{fig:julian_plot5}
-\end{figure}
-
-
-\subsubsection{Assessment Condition by Recency}
-
-Assessment recency provides another perspective on the relationship between assessment history and current boiler condition. Figure~\ref{fig:julian_plot6} compares the proportion of not-green assessments across different intervals since the previous assessment, including records without a prior assessment. Differences among these groups suggest that assessment recency may provide useful information for understanding variations in condition status and informing future reassessment strategies. The overall not-green percentage serves as a reference for identifying intervals associated with relatively higher or lower proportions of not-green assessments.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\linewidth]{interesting_plot6.png}
-\caption{Assessment Condition by Recency}
-\label{fig:julian_plot6}
-\end{figure}
-
 \FloatBarrier
 
 \subsection{Principal Component Analysis}
 
-After data wrangling, a PCA was performed using the following columns of the cleaned dataset: NormlizedAge, EffectiveAge, RSL, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, LogCRV, Year, MonthSin, MonthCos, and Climate.  First, data were normalized and standardized (by centering on the mean, then dividing by standard deviation). Then, the singular value decomposiion SVD was generated. Figure \ref{fig:pca_init} shows the initial explained variance by principal component. Principal component (PC) 1 has a notable dominance of 34\% of the explained variance. Upon inspection of PC 1, all similarly derived lifecycle parameters (NormalizedAge, RSL, PredictedCI, and EffectiveAge) have roughly equal absolute values of ~.49 and are therefore relatively redundant. A new version of the PCA was then run using a single lifecycle parameter, RSL. RSL was selected because it is an intuitively interpretable value. The resulting PCA produced a smoother decline in explained variance across the PCs, which can be seen in Figure \ref{fig:pca_reduced}. Of note, a third PCA version was run that included all lifecycle parameters divided by 4 to reduce overall influence, but the results were unremarkable (refer to Figure \ref{fig:scaled_lifecycle_pca}). Therefore, further discussion of the PCA will refer to the reduced lifecycle version that was performed using RSL as the representative parameter.
-
-The loadings heatmap of the reduced-parameter PCA (Figure \ref{fig:heatmap_reduced_pca}) still shows the expected dominance of RSL in the first PC, but Recency, Climate, and Month are also key to PCs 2 and 3. To search for potential predictability, PC observation models (Vt') values were mapped back to assessed scores, color coded by "Green Region" (score >= 85) and "Not Green Region" (score < 85) and then plotted in histograms for each PC. Figure \ref{fig:score_dist_by_pc_reduced_pca} shows the results. Unfortunately, the analysis resulted in no clear distinguishing characteristics. PC 1, dominated by RSL, shows the most promise, but still has heavy overlap. Similar analysis was done for all 81 pairings of PC Scores, color coding by region and plotting as scatter plots. No definitive separation of clusters was apparent. The resulting mega plot is omitted from this document, but be found in the repository under figures/pc\_vs\_pc\_score\_scatter.png.
-
-Additional analysis was performed that attempted to include Facility (Fac) and Specification (Spec) information through hot matrix. With ~134 Fac codes and ~110 Specifications though, variance was spread across too many columns. Additional PC 1 histograms were produced with various trial and error parameter sets, attempting to further identify combinations that better separated Green and Not Green regions. Through the trials, it seemed that reintroducing PredictedCI (in addition to RSL) helped remove the two-peaked distribution in the Green data and represented more offset picture of two normal distributions. Other combinations of lifecycle parameters were tried with less desirable results. Additionally, better separation was observed when omitting PrevScore and Recency. It appears that PrevAssessed alone produced observably better separation. PrevScore, Recency, and PrevAssessed are linked, similar to the lifecycle parameters, although it is unclear as to why the simple boolean of PrevAssesed produced better separation between clusters.
-
-A new column was also introduced called "PercentGreen", as a way of representing Facility (Fac) code in the PCA.  It was produced by grouping the observations by Fac and then calculating the percentage of observations greater than or equal to 88 for each unique Fac. The result was then assigned as a new column across all observations. The rationale was that the Fac code may help to uderstand the relative importance of a particular facility type (Figure \ref{fig:not_green_fac} shows the variability in Fac codes with more than 20 observations). However, limitations to this approach include the fact that some Fac codes only have 1-2 assessments, which may not be a sufficient representation for a meaningful score, and additionally, the new column could be introducing a source of data leakage in the model since it derived using the dependent variable. Therefore, we used the new column with caution, and will verify its legitimacy in future project steps when we perform cross-validation of our prediction models. Of note, however, the new column did provide minor additional separation of regions in our histogram.
-
-The most promising feature combinations are shown in Figures \ref{fig:rsl_no_pgreen}, \ref{fig:rsl_w_pgreen}, \ref{fig:rsl_ci_no_pgreen}, and \ref{fig:rsl_ci_w_pgreen}, where we test various feature combinations including RSL, PredictedCI, and PercentGreen.
-
-Based on this analysis, future feature selection for predictive models can begin with the following guidelines:
-
-\begin{itemize}
-    \item Lifecycle parameters limited to RSL and PredictedCI or both.
-    \item Assessment history data limited to simply "PrevAssessed".
-    \item LogCRV, MonthSin, MonthCos, NormalizedAssetAge, and Climate all provide reasonable and roughly equivalent contributions.
-    \item PercentGreen or other Fac/Spec representation may be useful if shown not to cause data leakage or overfitting through cross validation.
-    \item Qty and Year provide negligible influence and can be omitted in favor of model simplification.
-\end{itemize}
+After data wrangling, a PCA was performed using the following columns of the cleaned dataset: NormalizedAge, EffectiveAge, RSL, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, LogCRV, Year, MonthSin, MonthCos, and Climate. First, data were normalized and standardized (by centering on the mean, then dividing by standard deviation). Then, the singular value decomposition (SVD) was generated. The initial explained variance by principal component is shown in Figure \ref{fig:pca_init}. Principal component (PC) 1 has a notable dominance of 34\% of the explained variance. Upon inspection of PC 1, all similarly derived lifecycle parameters (NormalizedAge, RSL, PredictedCI, and EffectiveAge) have roughly equal absolute values of $\sim$.49 and are therefore relatively redundant. A new version of the PCA was then run using a single lifecycle parameter, RSL. RSL was selected because it is an intuitively interpretable value. Through this reduced-parameter PCA, a smoother decline in explained variance across the PCs was produced, as seen in Figure \ref{fig:pca_reduced}. Further discussion of the PCA refers to the reduced lifecycle version that was performed using RSL as the representative parameter.
 
 \begin{figure}
 \centering
@@ -396,32 +329,13 @@ Based on this analysis, future feature selection for predictive models can begin
 \label{fig:pca_reduced}
 \end{figure}
 
+In the loadings heatmap of the reduced parameter PCA (Figure \ref{fig:heatmap_reduced_pca}), the expected dominance of RSL is still observed in the first PC, while Recency, Climate, and Month are also key to PCs 2 and 3. To search for potential predictability, PC observation mode ($V^T$) values were mapped back to assessed scores, color coded by "Green Region" ($\mathrm{Score} \geq 85$) and "Not Green Region" ($\mathrm{Score} < 85$), and then plotted in histograms for each PC in search of distinguishing characteristics (See Figure \ref{fig:rsl_no_pgreen}). PC 1 histograms were produced with various trial-and-error parameter sets, attempting to further identify combinations that better separated Green and Not Green regions. Through these trials, the two-peaked distribution in the Green data was removed by reintroducing PredictedCI (in addition to RSL), resulting in more offset normal distributions (Figure \ref{fig:rsl_ci_no_pgreen}). Additionally, better separation was observed when omitting PrevScore and Recency, whereas observably better separation was produced when using PrevAssessed alone. PrevScore, Recency, and PrevAssessed are linked, similar to the lifecycle parameters, although it is unclear as to why better separation between clusters was produced by the simple boolean of PrevAssessed. This could possibly be an artifact of the starting point of assessment history targeting a variably aged portfolio.
+
 \begin{figure}
 \centering
 \includegraphics[width=.8\linewidth]{loadings_heatmap_reduced_pca.png}
 \caption{Loadings Heatmap for Reduced Parameter PCA}
 \label{fig:heatmap_reduced_pca}
-\end{figure}
-
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{pc_vs_score_hists.png}
-\caption{Score Distributions by PC for Reduced Parameter PCA}
-\label{fig:score_dist_by_pc_reduced_pca}
-\end{figure}
-
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{scaled_lifecycle_pca.png}
-\caption{Scaled Lifecycle PCA}
-\label{fig:scaled_lifecycle_pca}
-\end{figure}
-
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{not_green_fac_hist.png}
-\caption{Percent Not Green by Fac}
-\label{fig:not_green_fac}
 \end{figure}
 
 \begin{figure}
@@ -433,24 +347,12 @@ Based on this analysis, future feature selection for predictive models can begin
 
 \begin{figure}
 \centering
-\includegraphics[width=.8\linewidth]{RSL_w_PGreen.png}
-\caption{PC1 with RSL, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge, PercentGreen}
-\label{fig:rsl_w_pgreen}
-\end{figure}
-
-\begin{figure}
-\centering
 \includegraphics[width=.8\linewidth]{RSL_CI_no_PGreen.png}
 \caption{PC1 with RSL, PredictedCI, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge}
 \label{fig:rsl_ci_no_pgreen}
 \end{figure}
 
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{RSL_CI_w_PGreen.png}
-\caption{PC1 with RSL, PredictedCI, PrevAssessed, LogCRV, MonthSin, MonthCos, NormalizedAssetAge, PercentGreen}
-\label{fig:rsl_ci_w_pgreen}
-\end{figure}
+Together, the findings from this exploratory analysis establish the baseline feature set and modeling considerations. Because a boiler's condition Score cannot be predicted by any single variable correlation and a strong relationship exists between the lifecycle parameters, predictive modeling is initialized using the following reduced feature set: lifecycle parameters limited to RSL and PredictedCI, assessment history represented solely by PrevAssessed, and the wrangled asset and environmental features (NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate), while Qty and Year are omitted due to negligible influence. Finally, the strong clustering of assessed scores at or above 88 creates a substantial imbalance between "Do Nothing" and "Needs Action" observations that must be accounted for when evaluating model performance.
 
 \FloatBarrier
 
@@ -731,7 +633,7 @@ Random seed & 1234 \\
 \end{tabularx}
 \end{table}
 
-Data preparation followed the earlier Data Wrangling section, using the same boiler filter and derived predictors. Missing PrevScore, Recency, and Climate values were replaced with means, as in the earlier analysis. For decision-tree validation, these means were calculated from the training data in each split rather than from the full dataset. Every feature set was evaluated on the same assessment records, with any exclusions documented in the notebook. Score defined the response and was not used as a predictor; PercentGreen and identifiers were also excluded from the inputs.
+Data preparation followed the earlier Data Wrangling section, using the same boiler filter and derived predictors. Missing PrevScore, Recency, and Climate values were replaced with means, as in the earlier analysis. For decision-tree validation, these means were calculated from the training data in each split rather than from the full dataset. Every feature set was evaluated on the same assessment records, with any exclusions documented in the notebook. Score defined the response and was not used as a predictor; identifiers were also excluded from the inputs.
 
 The tree learned a series of decision rules by splitting observations into groups using Gini impurity. Each final group, or leaf, estimated the NeedsAction probability from the proportion of its training observations in that category. Maximum depth limited the number of splits along a decision path, and minimum leaf size set the smallest number of observations supporting a prediction. The data were divided into approximately 80\% training and 20\% testing using a stratified split and random seed 1234. Five-fold cross-validation (CV) was performed on the training data, with the same folds used for all experiments and replacement means recalculated within each fold. Log loss was used to evaluate the predicted probabilities, with lower values indicating better performance. It was calculated using natural logarithms and numerical clipping to avoid $\log(0)$.
 
@@ -903,7 +805,7 @@ Accuracy at 0.50 cutoff & 0.834762 \\
 
 With the baseline developed, a series of experiments were performed to improve upon the initial hyperparameter selection.  Iterative tests were performed by doing sweeps of different values of one parameter at a time, choosing the best performer, then iterating the same tests on another individual parameter.  Successive tests would utilize the best overall combinations of parameters.  Table \ref{tab:ann-tuning} summarizes the number of experiments performed.  Baseline epochs, batch size, and optimizer selection proved to be the best performing options while $\lambda$, Learning Rate, and hidden layer configuration parameters were updated.  Overall performance gains were rather minimal.  Interestingly, experiments in hidden layer architecture revealed the best performance in one very large hidden layer as opposed to additional layers. 40 architecture selections were tried, and shallow networks consistently outperformed deep networks. Experiments with utilizing PCA projected data as input into the model were also performed, however this resulted in slightly worse model performance and was therefore omitted from the final configuration. Table \ref{tab:ann-configuration} shows the finalized configuration with the best performance found.  As an additional note, randomization was initialized with a hardcoded seed to ensure experimentation was repeatable and comparable.
 
-With hyperparameters tuned, the final stage of experimentation was variable feature selection. Trials of over 100 feature combinations were performed and the final (best performing) ANN feature selection used RSL, NormalizedAge, EffectiveAge, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate. This includes many more parameters than our hypothesized options during exploratory analysis.  While the performance difference was minimal, inclusion of all lifecycle parameters still resulted in lower log loss. The only omitted parameters were Qty, AssetAge, AssetDesignLife, and PercentGreen. 
+With hyperparameters tuned, the final stage of experimentation was variable feature selection. Trials of over 100 feature combinations were performed and the final (best performing) ANN feature selection used RSL, NormalizedAge, EffectiveAge, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate. This includes many more parameters than our hypothesized options during exploratory analysis.  While the performance difference was minimal, inclusion of all lifecycle parameters still resulted in lower log loss. The only omitted parameters were Qty, AssetAge, and AssetDesignLife.
 
 \begin{table}[htbp]
 \centering
@@ -995,9 +897,9 @@ Figure \ref{fig:ann_prediction_reliability} compares binned mean predicted "Need
 
 \FloatBarrier
 
-\subsection{Modeling Conclusion}
+\section{Discussion}
 
-Overall, the ANN produced the lowest held-out test log loss and the highest accuracy and precision at the $P(\mathrm{NeedsAction}) = 0.50$ cutoff (See Table \ref{tab:model_comparison}). The logistic regression model produced higher recall at this cutoff, but with lower precision. The difference in quality of predicted probabilities across all models was fairly small, and considering they were all developed independently by different individuals, there is reasonable confidence that they are approaching the expected results given the available data.
+%Overall, the ANN produced the lowest held-out test log loss and the highest accuracy and precision at the $P(\mathrm{NeedsAction}) = 0.50$ cutoff (See Table \ref{tab:model_comparison}). The logistic regression model produced higher recall at this cutoff, but with lower precision. The difference in quality of predicted probabilities across all models was fairly small, and considering they were all developed independently by different individuals, there is reasonable confidence that they are approaching the expected results given the available data.
 
 \begin{table}[htbp]
     \centering
@@ -1018,18 +920,10 @@ Overall, the ANN produced the lowest held-out test log loss and the highest accu
     \textit{Note.} Log loss evaluates the quality of predicted probabilities and does not require a classification cutoff. Accuracy, precision, and recall are dependent on the selected $P(\mathrm{NeedsAction})$ cutoff and measures can change if the threshold is adjusted.}
 \end{table}
 
-The motivation for the effort is to produce the best quality of predicted probabilities for a Value of Information (VOI) model. The practical application is described in Grussing's proposed implementation of using VOI to optimize condition assessment planning \cite{grussing2018optimized}. Figure \ref{fig:grussing_voi_example} illustrates the VOI process where expected value of an assessment is calculated based on the variable costs and probabilities of the possible decision branches using work planning thresholds.  For Grussing's case, he used a Markov state transition matrix (representing component degradation) and some assumed assessor error ranges for the probability scores. The drawback of the Markov model is that the degradation transitions did not consider ongoing maintenance actions from prior year investments and would tend to underestimate the actual observed conditions. Another method of producing the probabilities is to simply assign the prevalence of historical assessments in each decision region (which would correlate to a log loss of $\approx$ .524).  The models developed in this study, while not able to achieve optimal performance, would still provide a practical improvement over the prevalence only or degradation based approaches.
-
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{Grussing_VOI_Example.png}
-\caption{Value of Information for Assessment Planning Example \protect\cite{grussing2018optimized}}
-\label{fig:grussing_voi_example}
-\end{figure}
+%The motivation for the effort is to produce the best quality of predicted probabilities for a Value of Information (VOI) model. The practical application is described in Grussing's proposed implementation of using VOI to optimize condition assessment planning \cite{grussing2018optimized}. Figure \ref{fig:grussing_voi_example} illustrates the VOI process where expected value of an assessment is calculated based on the variable costs and probabilities of the possible decision branches using work planning thresholds.  For Grussing's case, he used a Markov state transition matrix (representing component degradation) and some assumed assessor error ranges for the probability scores. The drawback of the Markov model is that the degradation transitions did not consider ongoing maintenance actions from prior year investments and would tend to underestimate the actual observed conditions. Another method of producing the probabilities is to simply assign the prevalence of historical assessments in each decision region (which would correlate to a log loss of $\approx$ .524).  The models developed in this study, while not able to achieve optimal performance, would still provide a practical improvement over the prevalence only or degradation based approaches.
 
 \newpage
 
 \label{section:references}
 \bibliography{references}
-%
 \end{document}
