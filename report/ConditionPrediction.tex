@@ -357,17 +357,8 @@ Together, the findings from this exploratory analysis establish the baseline fea
 \FloatBarrier
 
 \subsection{Predictive Modeling}
-This exploratory analysis builds the foundations for future construction of predictive models by elucidating key characteristics and limitations of the Boilers dataset. For example, a bias around 88 in the assessed boiler condition scores when compared to the Wiebull-predicted CIs was identified as a direct consequence of organizational maintenance prioritization. This will potentially need to be accounted for in future dataset modeling. Additionally, correlation among independent variables, particularly the boiler lifecycle parameters, was quantified using Spearman's rank correlation coefficients. Similarly, these correlations will need to be addressed to mitigate confounding in future predictive models. The calculated Spearman correlation coefficients also demonstrated that a boiler's condition Score cannot be predicted by a single correlation with another variable, justifying the multivariate approaches outlined in the Proposed Objectives section. Data wrangling prepared the data for PCA, and promising feature combinations were identified using PCA. PCA results were also used to develop guidelines for feature selection for future predictive models. Finally, additional analyses compared green ($\mathrm{Score}\geq 88$) and not-green ($\mathrm{Score}<88$) assessment records in terms of lifecycle characteristics, asset age, climate, season of assessment, and prediction error in order to understand how this grouping might affect trends in the dataset. 
 
-Insights gained from exploratory analysis will be used in the development of several probabilistic classification models.  These  models can be useful for assessment planning when there is a desire to calculate the value of information gained from a new assessment compared against the expected cost of the maintenance action and the cost of the assessment itself. The developed models will return a probability distribution classifying the probability of a new assessment score resulting in either the "Do Nothing" (Green) or "Repair" (Not Green) maintenance decision regions. In practice, this type of model could be extended to include more decision regions like "Replace" or "Renovate" etc. depending on the maintenance manager's priorities.
-
-The relevant types of machine learning models that will be tested and cross validated to find the best performance include:
-
-\begin{itemize}
-    \item Multivariable Regression % Juliana
-    \item Supervised XGBoost Decision tree % Julian
-    \item Supervised Artificial Neural Network (ANN) % Eric
-\end{itemize}
+Insights gained from exploratory analysis were used in the development of several probabilistic classification models. Promising feature combinations were identified using PCA, and PCA results were used to develop guidelines for feature selection (Figures~\ref{fig:rsl_no_pgreen} and~\ref{fig:rsl_ci_no_pgreen}). This probability-based output was intended for future use in the project's value of information model. For the decision-tree and ANN analyses, two decision regions were used: ``NeedsAction'' (Assessed Score $<85$) and ``DoNothing'' (Assessed Score $\geq85$).
 
 \FloatBarrier
 
@@ -375,40 +366,21 @@ The relevant types of machine learning models that will be tested and cross vali
 
 \subsection{Multiple Linear Regression Modeling}
 
-As a first attempt at predictive modeling of the data, three different types of linear regression models were constructed to predict a boiler's Score, treated in this case as a continuous variable, using the independent variables in the wrangled dataset (RSL, PredictedCI, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate). All regression models were constructed using Julia's MLJ package.
+Three types of linear regression models were constructed to predict a boiler's Score, treated as a continuous variable, using the independent variables in the wrangled dataset (RSL, PredictedCI, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate). All regression models were constructed using Julia's MLJ package.
 
-The first model was an ordinary least squares (OLS) regression model. The OLS regression model has the following form:
+The same model form was used for ordinary least squares (OLS), Ridge, and Lasso regression:
 \[
-y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \dots + \beta_p x_p + \epsilon
+y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \dots + \beta_p x_p + \epsilon,
 \]
-where $y$ is a vector of the observed dependent variable values (in this case, Score), $\beta$ is a vector of coefficients, $x_p$ are dependent variables, and $\epsilon$ is a random error term.
+where $y$ is the observed Score, $\beta_j$ are regression coefficients, $x_j$ are independent variables, and $\epsilon$ is a random error term. The squared $L_2$ norm of the residuals was minimized for OLS. A squared $L_2$ norm regularization term was added to the objective function for Ridge regression, and an $L_1$ norm regularization term was added for Lasso regression~\cite{brunton2022data}.
 
-Additionally, OLS regression minimizes the squared $L_2$ norm. The objective function for ordinary least squares regression is given as 
-\[
-\beta_{\text{OLS}} = \underset{\beta}{\operatorname{argmin}} \lVert y - X\beta \rVert_2^2
-\]
-where $\hat{\beta}$ is a vector of the estimated regression coefficients $\beta$.
+Prior to training each of these models, the data were randomly partitioned into training ($80\%$) and testing ($20\%$) subsets. The OLS model was fit using the training dataset. For Ridge and Lasso, the regularization strength, $\lambda$, was selected using five-fold cross-validation (CV) on the training dataset within the \texttt{TunedModel()} function in Julia's MLJ package. The tuned values were 0.0162378 and 0.00127427, respectively. The tuned models were then fit using the full training dataset, and performance was evaluated using the held-out testing $20\%$ of the data.
 
-The second type of linear regression model, Ridge regression, keeps the same model form as the OLS regression model, while adding a squared $L_2$ norm regularization term to the objective function \cite{brunton2022data}. Regularization penalizes models that have large coefficients, and $L_2$ regularization pushes the values of small-valued parameters towards zero. The Ridge regression objective function is given by:
-\[
-\beta_{\text{Ridge}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_2^2 \right)
-\]
-where $\lambda$ is a hyperparameter coefficient that specifies the strength of the regularization. For our model, $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package.
-
-Finally, the third type of linear regression model, Lasso regression, also keeps the same model form as the OLS regression model, but instead adds an $L_1$ norm regularization term to the OLS objective function \cite{brunton2022data}. $L_1$ regularization also pushes the values of small-valued parameters to be smaller, but not nearly as strongly as $L_2$ regularization. The Lasso regression objective function is given by:
-\[
-\beta_{\text{Lasso}} = \underset{\beta}{\operatorname{argmin}} \left( \lVert y - X\beta \rVert_2^2 + \lambda \lVert \beta \rVert_1 \right)
-\]
-Again, for the Lasso regression model, $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package.
-
-Prior to training each of these models, the data were randomly partitioned into training ($80\%$) and testing ($20\%$). The OLS model was fit using the training dataset. Similarly, for the Ridge and Lasso models, once  $\lambda$ was tuned using five-fold cross validation of the testing set, the model was then fit using the full training dataset. Finally, performance was evaluated using the held out testing $20\%$ of the data. Table \ref{tab:performance_comparison} compares the coefficient of determination $R^2$, mean absolute error (MAE), and root mean square error (RMSE) for the OLS, Ridge, and Lasso models and training and testing datasets. Table \ref{tab:coefficient_comparison} shows the model coefficients for the three models, as well as the tuned $\lambda$ values for the Ridge and Lasso models. Additionally, Figures \ref{fig:ols_performance}, \ref{fig:ridge_performance}, and \ref{fig:lasso_performance} plot the predicted versus actual Score values for the OLS, Ridge, and Lasso models, respectively. Note that while Score was modeled as a continuous variable in this case, in practice it is typically assigned specific rating values as part of a direct condition rating (see definitions in \ref{table:AssessmentScores}), which accounts for the dominant vertical bands of points in the scatter plots. The cases of dots between the vertical bands represent distress surveys, when the range of possible scores is continuous rather than categorical.
-
-From these results, we see that the performance of the three models were nearly identical, with poor but very similar training and testing $R^2$, MAE, and RMSE values for all three models. For example, the training and testing $R^2$ values for all three models were approximately 0.221 and $0.202$, respectively. Additionally, the fitted model coefficients were very similar across the three models, and the tuned $\lambda$ values were relatively small, with the largest coefficient being 3.5687 for the RSL feature in the Lasso model. The similarly poor performance of the training and testing datasets, along with the similarity of the OLS, Ridge, and Lasso models, suggest that overfitting is not a problem with this dataset and model configuration (and therefore regularization is not necessary), but that the linear regression model is simply not a good fit for the data.
-
+The coefficient of determination ($R^2$), mean absolute error (MAE), and root mean square error (RMSE) for the training and testing datasets are compared in Table~\ref{tab:performance_comparison}. Very similar training and testing $R^2$, MAE, and RMSE values were obtained for all three models. The training and testing $R^2$ values were approximately 0.221 and 0.202, respectively. Little improvement was obtained through regularization.
 
 \begin{table}[htbp]
-\centering 
-\caption{Comparison of OLS, Ridge, and Lasso regression performance on training and testing datasets.} 
+\centering
+\caption{Comparison of OLS, Ridge, and Lasso regression performance on training and testing datasets.}
 \begin{tabular}{llccc}
 \hline
 Model & Dataset & $R^2$ & MAE & RMSE \\
@@ -427,55 +399,7 @@ Model & Dataset & $R^2$ & MAE & RMSE \\
 \label{tab:performance_comparison}
 \end{table}
 
-
-\begin{table}[htbp]
-\centering
-\caption{Comparison of OLS, Ridge, and Lasso model coefficients. Ridge and Lasso values include the optimized regularization parameter $\lambda$.}
-\begin{tabular}{lccc}
-\toprule
-& \multicolumn{3}{c}{Model Coefficients} \\
-\cmidrule(lr){2-4}
-Feature & OLS & Ridge & Lasso \\
-\midrule
-$\lambda$ & -- & 0.0162378 & 0.00127427 \\
-Intercept & 84.784249 & 84.784239 & 84.783922 \\
-RSL & 3.50085 & 3.3656 & 3.5687 \\
-PredictedCI & 2.51449 & 2.5951 & 2.44886 \\
-PrevAssessed & -0.893353 & -0.916602 & -0.872356 \\
-NormalizedAssetAge & -0.269221 & -0.272472 & -0.26837 \\
-MonthSin & -0.0863573 & -0.0910675 & -0.0827251 \\
-MonthCos & -0.215775 & -0.211968 & -0.21516 \\
-LogCRV & -0.422126 & -0.41774 & -0.420984 \\
-Climate & -0.305429 & -0.298896 & -0.306704 \\
-\bottomrule
-\end{tabular}
-\label{tab:coefficient_comparison}
-\end{table}
-
-
-\begin{table}[htbp]
-\centering 
-\caption{Comparison of OLS, Ridge, and Lasso regression model accuracy on training and test datasets.} 
-\begin{tabular}{llccc}
-\hline
-Model & Dataset & Accuracy \\
-\hline
-\multirow{2}{*}{OLS}
-& Train & $66.017\%$ \\
-& Test & $66.141\%$ \\
-\multirow{2}{*}{Ridge}
-& Train & $66.017\%$ \\
-& Test & $66.141\%$ \\
-\multirow{2}{*}{Lasso}
-& Train & $66.017\%$ \\
-& Test & $66.141\%$ \\
-\hline
-\end{tabular}
-\label{tab:performance_comparison}
-\end{table}
-
-\FloatBarrier
-
+Predicted versus actual Score values are plotted for OLS in Figure~\ref{fig:ols_performance}. While Score was modeled as a continuous variable, specific rating values are typically assigned as part of a direct condition rating (Table~\ref{table:AssessmentScores}), resulting in the dominant vertical bands of points. Intermediate scores were assigned for distress surveys.
 
 \begin{figure}
 \centering
@@ -484,88 +408,25 @@ Model & Dataset & Accuracy \\
 \label{fig:ols_performance}
 \end{figure}
 
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{ridge_performance.png}
-\caption{Predictive Performance of the Ridge Regression Model}
-\label{fig:ridge_performance}
-\end{figure}
-
-\begin{figure}
-\centering
-\includegraphics[width=.8\linewidth]{lasso_performance.png}
-\caption{Predictive Performance of the Lasso Regression Model}
-\label{fig:lasso_performance}
-\end{figure}
-
 \FloatBarrier
 
-As an additional measure of model performance, because the underlying objective is a classification problem to predict whether a boiler "Needs Action" (Score $\geq$ 88) or requires no maintenance ("Do Nothing," Score $< 88$), the predicted scores were converted to a categorical dataset using these two maintenance categories and cutoff values. The accuracy of the model to correctly predict "Needs Action" and "Do Nothing" maintenance status was then calculated and is shown in Table \ref{tab:reg_model_accuracy}. Once again, we see that the OLS, Ridge, and Lasso models perform similarly, and in the case of the classification problem, actually identically. Likewise, the training and testing datasets experience similarly poor predictive performance, with an accuracy of $66.1407\%$ and $66.0171\%$ in testing for all three models.
+Next, a logistic regression model was constructed to predict boiler maintenance classification. The logistic function, or sigmoid function, was applied to the linear predictor to estimate the probability of one class over another~\cite{brunton2022data}. An $L_2$ norm regularization term was included, like the Ridge regression model above~\cite{mlj_linear_models}.
 
-
-
-\begin{table}[htbp] 
-\centering 
-\begin{tabular}{lcc} 
-\toprule Model & Train Accuracy (\%) & Test Accuracy (\%) \\ 
-\midrule 
-OLS & 66.1407 & 66.0171 \\ 
-Ridge & 66.1407 & 66.0171 \\ 
-Lasso & 66.1407 & 66.0171 \\ 
-\bottomrule 
-\end{tabular} \caption{Comparison of training and testing maintenance classification accuracy for the OLS, Ridge, and Lasso regression models.} 
-\label{tab:reg_model_accuracy} 
-\end{table}
-
-
-Next, because the ultimate goal is to predict boiler maintenance classification, a logistic regression model was constructed. Logistic regression is a form of linear regression model that has the logistic function, or sigmoid function, added to the output in order to estimate the probability that a given observation falls into one class (class 1) over another (class 0) \cite{brunton2022data}. The logistic function is:
+Binary cross-entropy (BCE), also known as log loss, was used as the performance metric:
 \[
-f(x) = \frac{1}{1 + e^{-x}}
+\mathrm{BCE}=-\frac{1}{N}\sum_{n=1}^{N}
+\left[y_n\log\hat{y}_n+(1-y_n)\log(1-\hat{y}_n)\right],
 \]
-Additionally, the loss metric used for logistic regression is binary cross-entropy (BCE), also known as log loss. The binary cross entropy is as follows:
-\[
-\mathrm{BCE} =\ -\frac1N\sum_{n=1}^N\ \bigg[y_n  \log \hat y_n + (1 - y_n)  \log (1 - \hat y_n)\bigg]
-\]
-where N is the number of observations, $\hat y_n$ is the predicted probability that an observation $n$ belongs to class 1, and $y_n$ is the true class of the observation. A BCE of 0 indicates a perfect model, and higher values indicate poorer model performance. 
+where $N$ is the number of observations, $\hat{y}_n$ is the predicted probability for class 1 (NeedsAction), and $y_n$ is the true class of the observation. Lower values of log loss were preferred.
 
-Again, Julia's MLJ package was used to construct the model. With this package, the logistic regression model includes an $L_2$ norm regularization term, like the Ridge regression model above. The objective function for the logistic regression model is:
-\[
-\beta_{\text{Logistic}} = \arg\min_{\beta} \left( L(y, X\beta) + \frac{1}{2} n \lambda \|\beta\|_2^2 \right)
-\]
-where $y$ is a vector of the observed, true classifications (in this case, maintenance status as class 1 = "Needs Action" or class 0 ="Do Nothing"), $\beta$ is a vector of coefficients, $X$ is a matrix of dependent variable values, $\lambda$ is a hyperparameter coefficient for the $L_2$ norm regularization term, and $L(y, X\beta)$ is the BCE loss function as defined above \cite{mlj_linear_models}
+The data were first randomly partitioned into training ($80\%$) and testing ($20\%$) sets, and the hyperparameter $\lambda$ was selected using five-fold cross-validation on the training dataset. A value of $\lambda=0.001833$ was selected. The tuned model was then fit using the full training dataset, and performance was evaluated using the held-out testing $20\%$ of the data.
 
-Model training and testing followed a similar workflow to the Ridge and Lasso regression models. The data were first randomly partitioned into training ($80\%$) and testing ($20\%$) sets, and the hyperparameter $\lambda$ was selected using five-fold cross validation on the training dataset within the TunedModel() function in Julia's MLJ package. The tuned model was then fit using the full training dataset, and performance was evaluated using the held out testing $20\%$ of the data. Log loss was used as the performance metric for the logistic regression model.
-
-Table \ref{tab:logistic_params} shows the model coefficients for the logistic model, as well as the tuned $\lambda$ values, while Table\ref{tab:Logistic_performance_comparison} gives the log loss and accuracy for the logistic regression model training and testing datasets. Table \ref{tab:confusion_matrix} is a confusion matrix showing the predicted versus actual classification of the logistic regression classifier model on the testing dataset. Finally, Figure \ref{fig:logistic_hist} is a probability separation histogram for the actual "Do Nothing" and "Needs Action" classes in the testing dataset.
-
-From these results, we see that the logistic regression classifier model is an improvement upon the OSL, Ridge, and Lasso models, with a testing log loss and accuracy of 0.438335 and $81.099\%$, respectively. However, the confusion matrix shows that the model classifies a substantial number of actual "Do Nothing" observations as "Needs Action," and the probability separation histogram also does not show a clear cutoff or separation between the two data classes. Together, these results indicate that although the logistic regression model is better at predicting building maintenance category than the other linear regression approaches that were used, it is still not a particularly good fit for the data.
+A testing log loss and accuracy of 0.438335 and 81.099\%, respectively, were obtained (Table~\ref{tab:Logistic_performance_comparison}). A clear cutoff or separation between the two data classes was not observed in the probability separation histogram (Figure~\ref{fig:logistic_hist}).
 
 \begin{table}[htbp]
 \centering
-\caption{Logistic Regression Model Coefficients}
-\label{tab:logistic_params}
-\begin{tabular}{lc}
-\toprule Feature & Model Coefficient \\ 
-\textbf{Parameter} & {\textbf{Logistic}} \\
-\midrule
-$\lambda$          &  0.001833 \\
-Intercept          & -1.514010 \\
-RSL                & -0.607850 \\
-PredictedCI        & -0.425109 \\
-PrevAssessed       &  0.183116 \\
-NormalizedAssetAge &  0.024009 \\
-MonthSin           & -0.025699 \\
-MonthCos           &  0.052571 \\
-LogCRV             &  0.074351 \\
-Climate            &  0.154602 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{table}[htbp]
-\centering 
-\caption{Logistic regression performance on training and testing datasets.} 
-\begin{tabular}{llccc}
+\caption{Logistic regression performance on training and testing datasets.}
+\begin{tabular}{llcc}
 \hline
 Model & Dataset & Log Loss & Accuracy (\%) \\
 \hline
@@ -577,37 +438,19 @@ Model & Dataset & Log Loss & Accuracy (\%) \\
 \label{tab:Logistic_performance_comparison}
 \end{table}
 
-
-\begin{table}[htbp]
-\centering
-\caption{Testing data confusion matrix for the logistic regression classifier model}
-\label{tab:confusion_matrix}
-\begin{tabular}{llcc}
-\toprule
-& & \multicolumn{2}{c}{\textbf{Actual Classification}} \\
-\cmidrule(lr){3-4}
-& & \text{Do Nothing} & \text{Needs Action} \\
-\midrule
-\multirow{2}{*}{\begin{tabular}[c]{@{}l@{}}\textbf{Predicted}\\\textbf{Classification}\end{tabular}} 
-& \text{Do Nothing}   & 1,942 & 65  \\
-& \text{Needs Action} & 420   & 139 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
 \begin{figure}
 \centering
 \includegraphics[width=.8\linewidth]{log_prob_sep_hist.png}
 \caption{Predicted Probability by Observed Region for the Logistic Regression Model}
 \label{fig:logistic_hist}
 \end{figure}
-\FloatBarrier
 
 \FloatBarrier
+
 \subsection{Decision Tree}
 \label{sec:dt-analysis}
 
-A decision-tree classifier was developed using Julia's DecisionTree.jl package, with MLJBase used for data partitioning and cross-validation. The model was configured to estimate the probability that a boiler assessment falls within one of two decision regions: ``NeedsAction'' (Assessed Score $<85$) and ``DoNothing'' (Assessed Score $\geq85$). This probability-based output was intended for future use in the project's value of information model. The initial predictors were RSL, PredictedCI, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate, selected from the earlier exploratory analysis. These variables were used directly rather than as principal-component scores. Table~\ref{tab:dt-baseline} shows the baseline hyperparameters.
+A decision-tree classifier was developed using Julia's DecisionTree.jl package, with MLJBase used for data partitioning and cross-validation. The initial predictors were RSL, PredictedCI, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate, selected from the earlier exploratory analysis. These variables were used directly rather than as principal-component scores. The baseline hyperparameters are shown in Table~\ref{tab:dt-baseline}.
 
 \begin{table}[htbp]
 \centering
@@ -633,15 +476,13 @@ Random seed & 1234 \\
 \end{tabularx}
 \end{table}
 
-Data preparation followed the earlier Data Wrangling section, using the same boiler filter and derived predictors. Missing PrevScore, Recency, and Climate values were replaced with means, as in the earlier analysis. For decision-tree validation, these means were calculated from the training data in each split rather than from the full dataset. Every feature set was evaluated on the same assessment records, with any exclusions documented in the notebook. Score defined the response and was not used as a predictor; identifiers were also excluded from the inputs.
+The data were prepared using the boiler filter and derived predictors described in the earlier Data Wrangling section. Missing PrevScore, Recency, and Climate values were replaced with means, as in the earlier analysis. For decision-tree validation, these means were calculated from the training data in each split rather than from the full dataset. Every feature set was evaluated on the same assessment records. Score was not used as a predictor; identifiers were also excluded from the inputs.
 
-The tree learned a series of decision rules by splitting observations into groups using Gini impurity. Each final group, or leaf, estimated the NeedsAction probability from the proportion of its training observations in that category. Maximum depth limited the number of splits along a decision path, and minimum leaf size set the smallest number of observations supporting a prediction. The data were divided into approximately 80\% training and 20\% testing using a stratified split and random seed 1234. Five-fold cross-validation (CV) was performed on the training data, with the same folds used for all experiments and replacement means recalculated within each fold. Log loss was used to evaluate the predicted probabilities, with lower values indicating better performance. It was calculated using natural logarithms and numerical clipping to avoid $\log(0)$.
+Observations were split into groups using Gini impurity. In each final group, or leaf, the NeedsAction probability was estimated from the proportion of its training observations in that category. The data were divided into approximately 80\% training and 20\% testing using a stratified split and random seed 1234. Five-fold cross-validation (CV) was performed on the training data, with the same folds used for all experiments and replacement means recalculated within each fold. Log loss was used to evaluate the predicted probabilities. It was calculated using natural logarithms and numerical clipping to avoid $\log(0)$.
 
-The baseline produced a mean CV log loss of 0.408122 and a test log loss of 0.415814. Using a 0.50 probability cutoff for NeedsAction, test accuracy was 82.89\%, precision was 73.90\%, recall was 32.97\%, and F1 was 45.60\%. Approximately three-quarters of the assessments flagged by the model were below the score threshold, but only one-third of the actual NeedsAction cases were identified. These results provided the reference for the feature and hyperparameter experiments.
+Maximum depths of 2, 3, 4, 5, 6, and 8 were tested with minimum leaf sizes of 10, 30, and 60. All 18 depth--leaf combinations were evaluated for each of ten feature sets, giving 180 configurations. The minimum number of observations required to attempt a split was set to twice the minimum leaf size.
 
-With the baseline developed, experiments were performed to compare different predictors and tree settings. Maximum depths of 2, 3, 4, 5, 6, and 8 were tested with minimum leaf sizes of 10, 30, and 60. All 18 depth--leaf combinations were evaluated for each of ten feature sets, giving 180 configurations. The minimum number of observations required to attempt a split was set to twice the minimum leaf size.
-
-Table~\ref{tab:dt-features} compares the feature sets before and after tuning. Baseline8 contains the original eight predictors. The ``No'' configurations remove the named predictor, with NoCI7 removing PredictedCI and NoSeason6 removing both month variables. History10 adds PrevScore and Recency, Lifecycle10 adds NormalizedAge and EffectiveAge, and Expanded12 adds all four. The fixed-setting results use maximum depth 4 and minimum leaf size 30, while the tuned results use the best depth--leaf combination for each feature set.
+The feature sets before and after tuning are compared in Table~\ref{tab:dt-features}. The original eight predictors were included in Baseline8. For the ``No'' configurations, the named predictor was removed, with PredictedCI removed for NoCI7 and both month variables removed for NoSeason6. PrevScore and Recency were added for History10, NormalizedAge and EffectiveAge for Lifecycle10, and all four for Expanded12. Maximum depth 4 and minimum leaf size 30 were used for the fixed-setting results.
 
 \begin{table}[htbp]
 \centering
@@ -673,9 +514,7 @@ Expanded12      & 12 & 0.407465 & 0.401991 & 5 & 60 \\
 \end{tabularx}
 \end{table}
 
-Removing PredictedCI gave the lowest validation loss at both the fixed and tuned settings. At the baseline settings, loss decreased from 0.408122 to 0.405361; after tuning, NoCI7 reached 0.398774. In contrast, removing RSL or Climate increased the tuned loss to 0.417440 and 0.412898, respectively, compared with 0.401183 for the tuned baseline. Removing both seasonal variables helped slightly before tuning, but its tuned loss of 0.403239 remained higher than the tuned baseline. Adding assessment-history or lifecycle variables also did not improve on the tuned baseline. The feature experiments therefore favored retaining seven of the original eight predictors for this decision-tree model.
-
-Figure~\ref{fig:dt-hyperparameters} shows the tuning results for the original eight predictors, with each curve representing a different minimum leaf size. Maximum depth 5 and minimum leaf size 60 gave the lowest CV log loss, reducing it from 0.408122 for the baseline to 0.401183. The same combination was selected for every feature set. These settings were the best within the tested grid; minimum leaf sizes above 60 were not evaluated.
+The best result was obtained with NoCI7, maximum depth 5, and minimum leaf size 60. Its CV log loss of 0.398774 was approximately 2.29\% lower than the fixed baseline. The same depth--leaf combination was selected for every feature set; minimum leaf sizes above 60 were not evaluated. The test data were not used to select the model. Tuning results for the original eight predictors are shown in Figure~\ref{fig:dt-hyperparameters}.
 
 \begin{figure}[htbp]
 \centering
@@ -684,34 +523,7 @@ Figure~\ref{fig:dt-hyperparameters} shows the tuning results for the original ei
 \label{fig:dt-hyperparameters}
 \end{figure}
 
-Table~\ref{tab:dt-progression} brings the feature and hyperparameter results together. Changing the predictors alone improved validation loss, but tuning depth and leaf size produced a larger improvement. The best result combined both changes: NoCI7 with maximum depth 5 and minimum leaf size 60. Its CV log loss of 0.398774 was approximately 2.29\% lower than the fixed baseline. The selected predictors were RSL, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate. These comparisons came from the same 180-configuration search, and the test data were not used to select the model.
-
-\begin{table}[htbp]
-\centering
-\caption{Summary of decision-tree model selection.}
-\label{tab:dt-progression}
-\small
-\renewcommand{\arraystretch}{1.15}
-\setlength{\tabcolsep}{5pt}
-\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X l c c r@{}}
-\toprule
-\textbf{Comparison} &
-\textbf{Feature set} &
-\shortstack{\textbf{Maximum}\\\textbf{depth}} &
-\shortstack{\textbf{Minimum}\\\textbf{leaf size}} &
-\shortstack{\textbf{Mean CV}\\\textbf{log loss}} \\
-\midrule
-Fixed baseline  & Baseline8 & 4 & 30 & 0.408122 \\
-Features only   & NoCI7     & 4 & 30 & 0.405361 \\
-Complexity only & Baseline8 & 5 & 60 & 0.401183 \\
-Joint selection & NoCI7     & 5 & 60 & 0.398774 \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-Table~\ref{tab:dt-performance} compares the baseline and selected tree after both were refitted on all training observations and evaluated on the same test subset. Test log loss decreased from 0.415814 to 0.413995, a reduction of approximately 0.44\%. The improvement was smaller than that observed during cross-validation, and its statistical significance has not been established.
-
-At the 0.50 cutoff, recall increased from 32.97\% to 36.38\%, and F1 increased from 45.60\% to 47.65\%. Accuracy decreased slightly from 82.89\% to 82.62\%, while precision decreased from 73.90\% to 69.05\%. The selected tree identified a larger share of NeedsAction assessments, but a smaller proportion of its flags were correct. Tuning therefore improved test log loss and recall rather than producing an improvement across every metric. NeedsAction was treated as the positive class, and the classification metrics in the table are expressed as percentages.
+The baseline and selected tree were refitted on all training observations and evaluated on the same test subset (Table~\ref{tab:dt-performance}). Test log loss was reduced from 0.415814 to 0.413995, approximately 0.44\%. The improvement was smaller than that observed during cross-validation, and its statistical significance has not been established. At the 0.50 cutoff, recall was increased from 32.97\% to 36.38\%, and F1 from 45.60\% to 47.65\%, while accuracy and precision were reduced. NeedsAction was treated as the positive class, and the classification metrics in the table are expressed as percentages.
 
 \begin{table}[htbp]
 \centering
@@ -733,7 +545,7 @@ F1 (\%)        & 45.60    & 47.65    \\
 \end{tabularx}
 \end{table}
 
-Figure~\ref{fig:dt-confusion} shows the selected tree's test confusion matrix, with predicted categories on rows and observed categories on columns. The upper-right entry represents missed NeedsAction assessments, and the lower-left entry represents DoNothing assessments incorrectly flagged as NeedsAction. Precision of 69.05\% means that roughly seven of every ten flags were correct. However, recall of 36.38\% means that nearly two-thirds of the actual NeedsAction assessments were missed. The model was therefore relatively conservative in assigning NeedsAction at the 0.50 cutoff, despite correctly classifying most test observations overall.
+The selected tree's test confusion matrix is shown in Figure~\ref{fig:dt-confusion}, with predicted categories on rows and observed categories on columns. Nearly two-thirds of the actual NeedsAction assessments were missed at the 0.50 cutoff, despite most test observations being classified correctly overall.
 
 \begin{figure}[htbp]
 \centering
@@ -742,7 +554,7 @@ Figure~\ref{fig:dt-confusion} shows the selected tree's test confusion matrix, w
 \label{fig:dt-confusion}
 \end{figure}
 
-Figure~\ref{fig:dt-importance} shows how the selected tree used its predictors. RSL had the largest normalized Gini importance at 0.7790, followed by Climate at 0.1082 and PrevAssessed at 0.0498. MonthCos, NormalizedAssetAge, and MonthSin made smaller contributions of 0.0281, 0.0195, and 0.0154, respectively. LogCRV remained in the input set but had zero importance in the fitted tree. The prominence of RSL and Climate was consistent with the higher validation losses when these variables were removed. These importance values describe contributions to reducing training impurity, not causal effects or percentages of prediction accuracy; they do not establish a predictor's usefulness in other models.
+The largest normalized Gini importance was assigned to RSL at 0.7790, followed by Climate at 0.1082 and PrevAssessed at 0.0498 (Figure~\ref{fig:dt-importance}). LogCRV was retained in the input set but was assigned zero importance in the fitted tree. The prominence of RSL and Climate was consistent with the higher validation losses when these variables were removed. The importance values were based on reductions in training impurity; causal effects or a predictor's usefulness in other models cannot be established from them.
 
 \begin{figure}[htbp]
 \centering
@@ -751,13 +563,13 @@ Figure~\ref{fig:dt-importance} shows how the selected tree used its predictors. 
 \label{fig:dt-importance}
 \end{figure}
 
-Overall, removing PredictedCI and tuning the tree produced a small improvement in test log loss and increased recall, but the model still missed most NeedsAction assessments at the 0.50 cutoff. The decision tree provides an interpretable preliminary model, although these results do not establish that it is sufficient on its own for assessment prioritization. Evaluation used a random split of assessment records rather than a split by component or assessment date, so performance on new components and future assessments remains unverified. Predictor availability before a new assessment and the numerical treatment of Climate also remain considerations for practical use.
+Evaluation was performed using a random split of assessment records rather than a split by component or assessment date, so performance on new components and future assessments has not been verified. Predictor availability before a new assessment and the numerical treatment of Climate should also be considered for practical use.
 
 \FloatBarrier
 
 \subsection{Artificial Neural Network (ANN)}
 
-An artificial neural network (ANN) was developed using Julia's MLJ, Flux, and Optimisers packages. The ANN was configured to be a binary classifier. With the motivation for the model to be useful in deriving decision region probabilities in a value of information model, the binary classification setup allows model output representative of $P(SomeEvent)$. For simplicity to start, the model assumes only two possible decision regions of "NeedsAction" (Assessed Score < 85) or "DoNothing" (Assessed score >= 85). Insights from these simplified decision thresholds can be extended in future iterations to handle more defined regions. The initial feature set included RSL, PredictedCI, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate parameters based on previous exploratory analysis results. Baseline hyperparameters for the ANN were chosen from general guesses and are shown in Table \ref{tab:ann-baseline}.
+An artificial neural network (ANN) was developed using Julia's MLJ, Flux, and Optimisers packages. The ANN was configured to be a binary classifier for deriving decision region probabilities in a value of information model. The same eight predictors used for the regression and baseline decision-tree models were included in the initial feature set. Baseline hyperparameters are shown in Table~\ref{tab:ann-baseline}.
 
 \begin{table}[htbp]
 \centering
@@ -778,15 +590,13 @@ Optimizer & Adam \\
 \end{tabular}
 \end{table}
 
-Table \ref{tab:ann-baseline-performance} shows the baseline results.  For a model predicting probabilities, the log loss metric is used rather than RMSE as it evaluates the quality of predicted class probabilities rather than error in a numeric prediction. Lower log loss indicates a generally better performing model (0 being ideal). Cross validation was performed with a typical 5-fold strategy on 80\% of the total data with 20\% held out for testing. The cross validation log loss was $\approx$ 0.3986 which remained close to the held out test log loss of $\approx$ 0.4014. This indicates that the ANN performed similarly across the cross-validation validation folds and the held-out test data (a positive outcome).
+For a model predicting probabilities, the log loss metric was used to evaluate the quality of predicted class probabilities. Cross-validation was performed with a five-fold strategy on 80\% of the total data, with 20\% held out for testing. A cross-validation log loss of approximately 0.3986 and held-out test log loss of approximately 0.4014 were obtained for the baseline ANN (Table~\ref{tab:ann-baseline-performance}).
 
-Since the dataset is considerably imbalanced (i.e. $\approx$ 79\% of data is "DoNothing" and $\approx$ 21\% is "NeedsAction"), one could imagine a classifier that only returns "DoNothing" would be accurate 79\% of the time.  The imbalance provides a probability based baseline for evaluating log loss. Rather than assigning a hard "DoNothing" label to every boiler, a prevalence only model assigns the same probability distribution to every observation based only on the observed frequency in the training data (DoNothing: $\approx$ 79\%, NeedsAction: $\approx$ 21\%) regardless of any parameter values. This prevalence only model produced a log loss of 0.5237. The baseline ANN achieved a lower held out log loss of 0.4014, indicating that its feature informed probability estimates were better than simply using the overall proportion of "NeedsAction" observations. The reduction in log loss was approximately 23.4\%.
-
-Additionally, the probability output was converted to a raw classification with an initial naive cutoff of .5 ($P(NeedsAction) > .5$) to determine if the ANN can provide better classification performance than the always "DoNothing" model. The ANN achieved a precision of 0.713, meaning that approximately 71\% of boilers flagged as "NeedsAction" were observed in that region. Recall was 0.401, meaning that the model identified approximately 40\% of all observed "NeedsAction" cases at that cutoff. The overall classification accuracy was 0.835, which is a roughly 5\% improvement over simply guessing "DoNothing" for all predictions.
+In a prevalence-only model, the same probability distribution was assigned to every observation based only on the observed frequency in the training data: approximately 79\% DoNothing and 21\% NeedsAction. A log loss of 0.5237 was obtained for this model, compared with 0.4014 for the baseline ANN, a reduction of approximately 23.4\%. At the 0.50 cutoff, approximately 40\% of all observed NeedsAction cases were identified by the baseline ANN.
 
 \begin{table}[htbp]
 \centering
-\caption{Performance of the initial baseline ANN using the held-out test subset.}
+\caption{Performance of the initial baseline ANN using the held-out test subset. Precision, recall, and accuracy are expressed as proportions.}
 \label{tab:ann-baseline-performance}
 \begin{tabular}{lr}
 \hline
@@ -803,9 +613,9 @@ Accuracy at 0.50 cutoff & 0.834762 \\
 \end{tabular}
 \end{table}
 
-With the baseline developed, a series of experiments were performed to improve upon the initial hyperparameter selection.  Iterative tests were performed by doing sweeps of different values of one parameter at a time, choosing the best performer, then iterating the same tests on another individual parameter.  Successive tests would utilize the best overall combinations of parameters.  Table \ref{tab:ann-tuning} summarizes the number of experiments performed.  Baseline epochs, batch size, and optimizer selection proved to be the best performing options while $\lambda$, Learning Rate, and hidden layer configuration parameters were updated.  Overall performance gains were rather minimal.  Interestingly, experiments in hidden layer architecture revealed the best performance in one very large hidden layer as opposed to additional layers. 40 architecture selections were tried, and shallow networks consistently outperformed deep networks. Experiments with utilizing PCA projected data as input into the model were also performed, however this resulted in slightly worse model performance and was therefore omitted from the final configuration. Table \ref{tab:ann-configuration} shows the finalized configuration with the best performance found.  As an additional note, randomization was initialized with a hardcoded seed to ensure experimentation was repeatable and comparable.
+With the baseline developed, a series of experiments were performed to improve upon the initial hyperparameter selection. Iterative tests were performed by sweeping different values of one parameter at a time, with the best settings retained for successive tests (Table~\ref{tab:ann-tuning}). Baseline epochs, batch size, optimizer, and learning rate were retained, while $\lambda$ and hidden layer configuration parameters were updated. Forty architecture selections were tried, with one hidden layer of 112 nodes selected. Experiments with PCA projected data were also performed; however, slightly worse model performance was obtained, and PCA was omitted from the final configuration. Randomization was initialized with a fixed seed to ensure experimentation was repeatable.
 
-With hyperparameters tuned, the final stage of experimentation was variable feature selection. Trials of over 100 feature combinations were performed and the final (best performing) ANN feature selection used RSL, NormalizedAge, EffectiveAge, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate. This includes many more parameters than our hypothesized options during exploratory analysis.  While the performance difference was minimal, inclusion of all lifecycle parameters still resulted in lower log loss. The only omitted parameters were Qty, AssetAge, and AssetDesignLife.
+With hyperparameters tuned, the final stage of experimentation was variable feature selection. Trials of approximately 100 feature combinations were performed, and RSL, NormalizedAge, EffectiveAge, PredictedCI, Recency, PrevScore, PrevAssessed, NormalizedAssetAge, MonthSin, MonthCos, LogCRV, and Climate were selected. These predictors were standardized. While the performance difference was minimal, lower log loss was obtained with the inclusion of additional lifecycle parameters. The selected ANN configuration is shown in Table~\ref{tab:ann-configuration}.
 
 \begin{table}[htbp]
 \centering
@@ -849,11 +659,11 @@ Cross-validation & Five-fold stratified cross-validation \\
 \end{tabular}
 \end{table}
 
-Table \ref{tab:ann-performance} shows the resulting tuned performance. Final results improved held out test log loss from 0.4014 to 0.3885 and improved the relative reduction from a prevalence-only baseline from 23.4\% to 25.8\%.  Precision and recall (with cutoff threshold at $P(NeedsAction) > .5$) shifted toward a slight decrease in false positives (higher precision) and increase in "DoNothing" labels for actual "NeedsAction" (lower recall). Figure \ref{fig:ann_cutoff_tradeoff} shows a threshold selection tradeoff when considering cutoff between .2 and .9; reasonable selections could vary between .3 and .5 depending on decision maker priority. Figure \ref{fig:ann_probs_by_region} further emphasizes that range as it becomes more clear (at least visually) that classification becomes most distinguished within those probability cutoffs. Additionally, Figure \ref{fig:ann_probs_by_region} also shows that for boilers that were observed in "DoNothing", predominately low $P(NeedsAction)$ values are assigned (a desirable outcome); however, boilers observed in "NeedsAction" remain assigned more evenly distributed $P(NeedsAction)$ values with a slightly observed bias toward low probabilities. This shows that the model still struggles to create a fully clear distinction between the two categories.
+Held-out test log loss was reduced from 0.4014 to 0.3885, and the relative reduction from the prevalence-only baseline was increased from 23.4\% to 25.8\% (Table~\ref{tab:ann-performance}). At the 0.50 cutoff, precision was increased from 0.713376 to 0.726644, while recall was reduced from 0.401434 to 0.376344 and accuracy from 0.834762 to 0.833593. A smaller proportion of actual NeedsAction cases was therefore identified despite the lower log loss.
 
 \begin{table}[htbp]
 \centering
-\caption{Performance of the selected ANN using the held-out test subset.}
+\caption{Performance of the selected ANN using the held-out test subset. Precision, recall, and accuracy are expressed as proportions.}
 \label{tab:ann-performance}
 \begin{tabular}{lr}
 \hline
@@ -870,6 +680,8 @@ Accuracy at 0.50 cutoff & 0.833593 \\
 \end{tabular}
 \end{table}
 
+A threshold selection tradeoff was examined for cutoffs between 0.2 and 0.9 (Figure~\ref{fig:ann_cutoff_tradeoff}). For boilers observed in DoNothing, predominantly low $P(\mathrm{NeedsAction})$ values were assigned; however, more evenly distributed probabilities were assigned to boilers observed in NeedsAction, with a slight bias toward low probabilities (Figure~\ref{fig:ann_probs_by_region}). A clear distinction between the two categories was not obtained.
+
 \begin{figure}
 \centering
 \includegraphics[width=.8\linewidth]{ANN_Cutoff_Tradeoff.png}
@@ -884,9 +696,7 @@ Accuracy at 0.50 cutoff & 0.833593 \\
 \label{fig:ann_probs_by_region}
 \end{figure}
 
-\FloatBarrier
-
-Figure \ref{fig:ann_prediction_reliability} compares binned mean predicted "NeedsAction" probabilities with the observed "NeedsAction" frequency within each bin. Points near the diagonal indicate probability ranges where the ANN predictions approximately matched the observed frequency, while deviations from the diagonal indicate probability ranges where the model over or under estimated the $P(NeedsAction)$ rate.  Overall, very little deviation from optimal calibration is observed, indicating that despite the lack of clear distinction between "DoNothing" and "NeedsAction" the frequencies of detection are consistent with the data.  This may point to a consistency with the randomness of the real world, relatively new equipment may have faults and failures, but equipment that has operated well for the first few years tends to not have as many failures throughout the rest of its design life. It may also be explained by other unobserved characteristics or variation in assessment outcomes.  Final conclusions of the ANN approach support that the model is a practical and useful improvement over the prevalence-only probability baseline.
+Binned mean predicted NeedsAction probabilities were compared with the observed NeedsAction frequency within each bin (Figure~\ref{fig:ann_prediction_reliability}). Approximate agreement was reported between predicted probabilities and observed frequencies, although a clear distinction between DoNothing and NeedsAction was not obtained. Practical benefit in assessment planning was not established by these comparisons.
 
 \begin{figure}
 \centering
@@ -894,6 +704,12 @@ Figure \ref{fig:ann_prediction_reliability} compares binned mean predicted "Need
 \caption{Calibration of Predicted Probabilities}
 \label{fig:ann_prediction_reliability}
 \end{figure}
+
+\FloatBarrier
+
+The three classifiers are compared in Table~\ref{tab:model_comparison}. Test log losses of 0.438335, 0.413995, and 0.388509 were obtained for logistic regression, the selected decision tree, and the selected ANN, respectively. The lowest reported test log loss was obtained with the ANN.
+
+A common response definition and test partition were not documented across all three evaluations. Logistic-regression precision and recall were treated as provisional because the confusion-matrix orientation and reported class proportions had not been reconciled. The results were therefore compared descriptively; a statistically supported ranking on a common test set was not established.
 
 \FloatBarrier
 
